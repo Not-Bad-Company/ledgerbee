@@ -1,0 +1,210 @@
+//! Sales invoices: totals, numbering, and the rows the reports read.
+
+use crate::db;
+use crate::entities::{self, INVOICES};
+use crate::error::{ApiError, ApiResult};
+use crate::tax::pct;
+use rusqlite::Connection;
+use serde::Serialize;
+use serde_json::Value;
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct RateTotal {
+    pub rate: String,
+    pub base_cents: i64,
+    pub vat_cents: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Totals {
+    pub per_rate: Vec<RateTotal>,
+    pub excl_cents: i64,
+    pub vat_cents: i64,
+    pub incl_cents: i64,
+}
+
+/// One line's amount: quantity (thousandths) × unit price, rounded to cents.
+pub fn line_amount(quantity_milli: i64, unit_cents: i64) -> i64 {
+    let n = quantity_milli as i128 * unit_cents as i128;
+    let q = (n.abs() + 500) / 1000;
+    (if n < 0 { -q } else { q }) as i64
+}
+
+fn rate_pct(rate: &str) -> i64 {
+    rate.parse().unwrap_or(0)
+}
+
+/// Totals per btw rate, the btw computed once per rate over the summed base
+/// (not per line), which is how the law has it and avoids rounding drift.
+/// Under reverse charge or export no btw is charged whatever the lines say.
+pub fn totals(scheme: &str, lines: &[(i64, i64, String)]) -> Totals {
+    let mut per_rate: Vec<RateTotal> = vec![];
+    for (q, unit, rate) in lines {
+        let rate = if scheme == "nl" { rate.clone() } else { "0".to_string() };
+        let amount = line_amount(*q, *unit);
+        match per_rate.iter_mut().find(|r| r.rate == rate) {
+            Some(r) => r.base_cents += amount,
+            None => per_rate.push(RateTotal { rate, base_cents: amount, vat_cents: 0 }),
+        }
+    }
+    per_rate.sort_by_key(|r| -rate_pct(&r.rate));
+    for r in &mut per_rate {
+        r.vat_cents = pct(r.base_cents, rate_pct(&r.rate));
+    }
+    let excl_cents = per_rate.iter().map(|r| r.base_cents).sum();
+    let vat_cents = per_rate.iter().map(|r| r.vat_cents).sum();
+    Totals { per_rate, excl_cents, vat_cents, incl_cents: excl_cents + vat_cents }
+}
+
+pub fn totals_of(invoice: &Value) -> Totals {
+    let scheme = invoice["vat_scheme"].as_str().unwrap_or("nl");
+    let lines: Vec<(i64, i64, String)> = invoice["lines"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|l| {
+                    (
+                        l["quantity_milli"].as_i64().unwrap_or(0),
+                        l["unit_cents"].as_i64().unwrap_or(0),
+                        l["vat_rate"].as_str().unwrap_or("21").to_string(),
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    totals(scheme, &lines)
+}
+
+/// Every invoice that counts (not a concept) dated between `from` and `to`.
+pub fn final_between(conn: &Connection, from: &str, to: &str) -> ApiResult<Vec<Value>> {
+    let q = entities::ListQuery { from: Some(from.into()), to: Some(to.into()), ..Default::default() };
+    Ok(entities::list(conn, &INVOICES, &q)?.into_iter().filter(|i| i["status"] != "concept").collect())
+}
+
+/// Gives a concept its number (`YYYY-NNN`, the next in its year, never
+/// reused) and makes it final. Its lines and amounts cannot change after this.
+pub fn finalize(conn: &mut Connection, id: &str) -> ApiResult<Value> {
+    let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
+    if inv["status"] != "concept" {
+        return Err(ApiError::bad("Deze factuur is al definitief"));
+    }
+    if inv["client_id"].is_null() {
+        return Err(ApiError::bad("Kies eerst een klant"));
+    }
+    if inv["lines"].as_array().map(|a| a.is_empty()).unwrap_or(true) {
+        return Err(ApiError::bad("Een factuur zonder regels kan niet definitief"));
+    }
+    let date = inv["date"].as_str().unwrap_or_default().to_string();
+    if date.len() != 10 {
+        return Err(ApiError::bad("Ongeldige factuurdatum"));
+    }
+    let year = &date[..4];
+    let tx = conn.transaction()?;
+    let last: Option<String> = tx
+        .query_row(
+            "SELECT number FROM invoices WHERE number LIKE ?1 ORDER BY number DESC LIMIT 1",
+            [format!("{year}-%")],
+            |r| r.get(0),
+        )
+        .ok();
+    let next = last.and_then(|n| n[5..].parse::<u32>().ok()).unwrap_or(0) + 1;
+    let number = format!("{year}-{next:03}");
+    let due = if inv["due_date"].as_str().unwrap_or_default().is_empty() {
+        let days: i64 = tx
+            .query_row("SELECT payment_days FROM clients WHERE id = ?1", [inv["client_id"].as_str()], |r| r.get(0))
+            .unwrap_or(14);
+        let d = chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d").map_err(|_| ApiError::bad("Ongeldige factuurdatum"))?;
+        (d + chrono::Duration::days(days)).to_string()
+    } else {
+        inv["due_date"].as_str().unwrap_or_default().to_string()
+    };
+    tx.execute(
+        "UPDATE invoices SET number = ?1, status = 'verzonden', due_date = ?2, updated_at = ?3 WHERE id = ?4",
+        rusqlite::params![number, due, db::now(), id],
+    )?;
+    let after = entities::get(&tx, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
+    entities::audit(&tx, "invoices", id, "finalize", Some(&inv), Some(&after))?;
+    tx.commit()?;
+    Ok(after)
+}
+
+/// Marks paid (`date` given) or unpaid (`None`).
+pub fn set_paid(conn: &mut Connection, id: &str, date: Option<&str>) -> ApiResult<Value> {
+    let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
+    if inv["status"] == "concept" {
+        return Err(ApiError::bad("Een concept kan niet betaald zijn"));
+    }
+    let status = if date.is_some() { "betaald" } else { "verzonden" };
+    conn.execute(
+        "UPDATE invoices SET paid_at = ?1, status = ?2, updated_at = ?3 WHERE id = ?4",
+        rusqlite::params![date, status, db::now(), id],
+    )?;
+    let after = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
+    entities::audit(conn, "invoices", id, "paid", Some(&inv), Some(&after))?;
+    Ok(after)
+}
+
+/// A final invoice keeps its content: only the note may change, and status
+/// moves only through finalize/paid. Concepts are free.
+pub fn check_update(conn: &Connection, id: &str, body: &Value) -> ApiResult<()> {
+    let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
+    if let Some(s) = body.get("status") {
+        if s != &inv["status"] {
+            return Err(ApiError::bad("De status verandert via definitief maken of betaald melden"));
+        }
+    }
+    if inv["status"] != "concept" {
+        let allowed = ["note", "status", "id"];
+        if body.as_object().map(|o| o.keys().any(|k| !allowed.contains(&k.as_str()))).unwrap_or(false) {
+            return Err(ApiError::bad("Een definitieve factuur kan niet meer veranderen. Maak een creditfactuur."));
+        }
+    }
+    Ok(())
+}
+
+pub fn check_delete(conn: &Connection, id: &str) -> ApiResult<()> {
+    let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
+    if !inv["number"].is_null() {
+        return Err(ApiError::bad("Een genummerde factuur blijft bestaan. Maak een creditfactuur."));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn btw_is_computed_per_rate_not_per_line() {
+        // Three lines of 0,33 at 21%: per line 0,07 × 3 = 0,21, per rate 0,99 × 21% = 0,21.
+        let t = totals("nl", &[(1000, 33, "21".into()), (1000, 33, "21".into()), (1000, 33, "21".into()), (2000, 500, "9".into())]);
+        assert_eq!(t.per_rate[0], RateTotal { rate: "21".into(), base_cents: 99, vat_cents: 21 });
+        assert_eq!(t.per_rate[1], RateTotal { rate: "9".into(), base_cents: 1000, vat_cents: 90 });
+        assert_eq!(t.incl_cents, 99 + 21 + 1000 + 90);
+        let eu = totals("verlegd_eu", &[(1000, 10000, "21".into())]);
+        assert_eq!(eu.vat_cents, 0);
+        assert_eq!(line_amount(1500, 333), 500);
+    }
+
+    #[test]
+    fn numbers_run_per_year_and_final_invoices_are_frozen() {
+        let pool = db::memory();
+        let mut c = pool.get().unwrap();
+        entities::create(&mut c, &entities::CLIENTS, &json!({"id": "c", "name": "Klant", "payment_days": 30})).unwrap();
+        for (id, date) in [("a", "2026-10-01"), ("b", "2026-11-01"), ("x", "2027-01-02")] {
+            entities::create(&mut c, &INVOICES, &json!({"id": id, "client_id": "c", "date": date,
+                "lines": [{"description": "Website", "quantity_milli": 1000, "unit_cents": 125000, "vat_rate": "21"}]})).unwrap();
+        }
+        assert_eq!(finalize(&mut c, "a").unwrap()["number"], json!("2026-001"));
+        let b = finalize(&mut c, "b").unwrap();
+        assert_eq!(b["number"], json!("2026-002"));
+        assert_eq!(b["due_date"], json!("2026-12-01"));
+        assert_eq!(finalize(&mut c, "x").unwrap()["number"], json!("2027-001"));
+        assert!(finalize(&mut c, "a").is_err());
+        assert!(check_update(&c, "a", &json!({"lines": []})).is_err());
+        assert!(check_update(&c, "a", &json!({"note": "bedankt"})).is_ok());
+        assert!(check_delete(&c, "a").is_err());
+        assert_eq!(set_paid(&mut c, "a", Some("2026-10-10")).unwrap()["status"], json!("betaald"));
+    }
+}

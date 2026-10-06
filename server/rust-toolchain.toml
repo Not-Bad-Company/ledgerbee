@@ -1,0 +1,6 @@
+# One compiler for the Pi, CI and every workstation. Without it CI took the
+# newest stable, whose new clippy lints failed a tree that was clean locally.
+# The Pi's own toolchain; bump it here and on the Pi together.
+[toolchain]
+channel = "1.94.1"
+components = ["clippy", "rustfmt"]

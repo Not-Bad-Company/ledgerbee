@@ -1,0 +1,11 @@
+server/target/
+server/data/
+server/.env
+app/build/
+app/.dart_tool/
+app/.flutter-plugins*
+app/android/.gradle/
+app/android/local.properties
+app/android/key.properties
+*.jks
+*.keystore
