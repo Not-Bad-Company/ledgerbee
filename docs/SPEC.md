@@ -153,25 +153,27 @@ Deadline 1 May (reminders from 1 March), voorlopige aanslag hint.
 
 ## Scanning
 
-Phone: camera (or gallery/PDF share) → image → ML Kit text recognition
-(Latin script, on-device) → `ReceiptParser` (pure Dart, unit-tested):
+Phone: camera (or a file) → ML Kit text recognition (Latin script, on the
+device, offline) → the text goes to the server's `parse.rs`, one rule-based
+parser for every source (unit-tested):
 
-- total: lines with `totaal|te betalen|pin|betaald|bedrag`, the largest such
-  amount wins, amounts in `1.234,56` / `12,34` / `12.34` formats;
-- date: `dd-mm-yyyy`, `dd/mm/yy`, `dd.mm.yyyy`, `yyyy-mm-dd`, Dutch month
-  names; nearest plausible date not in the future;
-- btw: `btw 21%`/`21% btw`/`hoog`/`laag` blocks with base and vat amounts;
-  when missing, assume all 21% and say so;
-- supplier: first non-trivial line, matched against `suppliers.match_terms`;
-  KvK (8 digits after `kvk`) and btw-id (`NL\d{9}B\d{2}`) when printed.
+- total: lines with `totaal|te betalen|...` beat `pin|betaald|...`; the
+  largest such amount wins; `1.234,56` / `12,34` / `12.34` / `5,-`;
+- date: `dd-mm-yyyy`, `dd/mm/yy`, `yyyy-mm-dd`, Dutch and English month
+  names; the first one not in the future and not older than two years;
+- btw: lines naming `21%`/`9%`/`hoog`/`laag` with base and btw (or incl and
+  btw, or only btw); missing → 21% assumed and said so; reverse-charge
+  wording or a foreign btw-id → `verlegd_eu`;
+- supplier: KvK/btw-id/match terms of known suppliers, else the first line.
 
-Result opens as a filled form; the user confirms. Corrections teach
-supplier → category and match terms. The photo is uploaded as attachment.
+The draft opens as a filled form; the user confirms. Confirming teaches the
+supplier its category and a match term. Offline, the photo and OCR text wait
+in the app's outbox; the server parses them on arrival and the document stays
+a concept for review.
 
-Laptop (Linux, no ML Kit): PDF invoices are imported by file pick; the
-server extracts the text layer with `pdftotext` and runs the same parser
-logic ported to Rust (`parse.rs`), returning a draft. Image files on Linux
-can be attached without OCR (manual entry).
+Laptop (Linux, no ML Kit): PDF invoices are uploaded and the server reads the
+text layer with `pdftotext -layout` into the same parser. Images on Linux are
+attached without OCR (manual entry).
 
 ## Invoicing
 
@@ -223,8 +225,8 @@ Belastingdienst.
 - Server: unit tests for btw rubrieken, IB calc, depreciation, KIA, parser,
   bank CSV detection and matching, invoice numbering, period locking; API
   tests through the router (`tower::ServiceExt::oneshot`).
-- App: unit tests for `ReceiptParser`, money formatting, outbox; widget
-  smoke tests; Linux build and Android debug build must succeed.
+- App: unit tests for money and duration parsing and invoice totals (parity
+  with the server); Linux build and Android debug build must succeed.
 
 ## Build order
 

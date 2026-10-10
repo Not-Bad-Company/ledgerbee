@@ -138,10 +138,10 @@ pub fn report(conn: &Connection, year: i32) -> ApiResult<IbReport> {
         }
     }
     if concept > 0 {
-        warnings.push(format!("{concept} document(en) in {year} zijn nog niet bevestigd en tellen niet mee"));
+        warnings.push(if concept == 1 { format!("1 kostenpost in {year} is nog niet bevestigd en telt niet mee") } else { format!("{concept} kostenposten in {year} zijn nog niet bevestigd en tellen niet mee") });
     }
     if uncategorised > 0 {
-        warnings.push(format!("{uncategorised} kostenregel(s) zonder categorie staan onder overig"));
+        warnings.push(if uncategorised == 1 { "1 kostenregel zonder categorie staat onder andere kosten".to_string() } else { format!("{uncategorised} kostenregels zonder categorie staan onder andere kosten") });
     }
     let kosten_cents: i64 = kosten.values().sum();
 

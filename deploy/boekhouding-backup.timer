@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly Boekhouding backup
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Europe/Amsterdam
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

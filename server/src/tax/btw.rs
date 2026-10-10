@@ -109,7 +109,7 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
         |row| row.get(0),
     )?;
     if concepts > 0 {
-        warnings.push(format!("{concepts} conceptfactuur/-facturen in dit kwartaal tellen nog niet mee"));
+        warnings.push(if concepts == 1 { "1 conceptfactuur in dit kwartaal telt nog niet mee".to_string() } else { format!("{concepts} conceptfacturen in dit kwartaal tellen nog niet mee") });
     }
 
     // Costs.
@@ -141,7 +141,7 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
         }
     }
     if unconfirmed > 0 {
-        warnings.push(format!("{unconfirmed} bonnetje(s)/factuur/facturen in dit kwartaal zijn nog niet bevestigd en tellen niet mee"));
+        warnings.push(if unconfirmed == 1 { "1 kostenpost in dit kwartaal is nog niet bevestigd en telt niet mee".to_string() } else { format!("{unconfirmed} kostenposten in dit kwartaal zijn nog niet bevestigd en tellen niet mee") });
     }
 
     let rub = |code: &'static str, label: &'static str, has_base: bool| {

@@ -154,8 +154,10 @@ pub fn check_update(conn: &Connection, id: &str, body: &Value) -> ApiResult<()> 
         }
     }
     if inv["status"] != "concept" {
-        let allowed = ["note", "status", "id"];
-        if body.as_object().map(|o| o.keys().any(|k| !allowed.contains(&k.as_str()))).unwrap_or(false) {
+        // Only writable fields count; ids and timestamps sent along are ignored.
+        let content = |k: &str| k == "lines" || INVOICES.fields.iter().any(|(f, _)| *f == k);
+        let changes = |k: &str, v: &Value| content(k) && k != "note" && (k == "lines" || v != &inv[k]);
+        if body.as_object().map(|o| o.iter().any(|(k, v)| changes(k, v))).unwrap_or(false) {
             return Err(ApiError::bad("Een definitieve factuur kan niet meer veranderen. Maak een creditfactuur."));
         }
     }
@@ -204,6 +206,8 @@ mod tests {
         assert!(finalize(&mut c, "a").is_err());
         assert!(check_update(&c, "a", &json!({"lines": []})).is_err());
         assert!(check_update(&c, "a", &json!({"note": "bedankt"})).is_ok());
+        assert!(check_update(&c, "a", &json!({"id": "a", "note": "x", "created_at": "2026", "client_id": "c"})).is_ok());
+        assert!(check_update(&c, "a", &json!({"date": "2026-01-01"})).is_err());
         assert!(check_delete(&c, "a").is_err());
         assert_eq!(set_paid(&mut c, "a", Some("2026-10-10")).unwrap()["status"], json!("betaald"));
     }

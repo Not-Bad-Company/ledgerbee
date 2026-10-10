@@ -1,0 +1,13 @@
+[Unit]
+Description=Boekhouding backup (database snapshot and attachments)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=daanhpi
+Group=daanhpi
+WorkingDirectory=/home/daanhpi/projects/work/boekhouding
+EnvironmentFile=/home/daanhpi/projects/work/boekhouding/server/.env
+ExecStart=/home/daanhpi/projects/work/boekhouding/scripts/backup.sh
+Nice=10
+IOSchedulingClass=idle
