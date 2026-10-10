@@ -114,7 +114,7 @@ class Section extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
           child: Row(children: [
             Expanded(
-              child: Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              child: Text(title, style: labelStyle()),
             ),
             ?trailing,
           ]),
@@ -182,7 +182,7 @@ class Notice extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: c.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(12), border: Border.all(color: c.withValues(alpha: 0.30))),
+      decoration: BoxDecoration(color: c.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(2), border: Border.all(color: c.withValues(alpha: 0.30))),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(icon, size: 18, color: c),
         const SizedBox(width: 10),
@@ -281,39 +281,32 @@ class Readable extends StatelessWidget {
       Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: BoxConstraints(maxWidth: max), child: child));
 }
 
-/// The app's mark: the blue envelope, closed. Same drawing as the launcher icon.
+/// The app's mark: how an accountant closes a column. A single rule above
+/// the total, the double rule under it that says the sum is final. Amber on
+/// black, the same drawing as the launcher icon.
 class AppMark extends StatelessWidget {
   final double size;
   const AppMark({super.key, this.size = 40});
 
   @override
   Widget build(BuildContext context) =>
-      Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, heightFactor: 1, child: SizedBox.square(dimension: size, child: CustomPaint(painter: _MarkPainter())));
+      Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, heightFactor: 1, child: SizedBox.square(dimension: size, child: CustomPaint(painter: MarkPainter())));
 }
 
-class _MarkPainter extends CustomPainter {
+class MarkPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size s) {
-    final r = RRect.fromRectAndRadius(Offset.zero & s, Radius.circular(s.width * 0.26));
-    canvas.drawRRect(r, Paint()..color = envelope);
-    final w = s.width, h = s.height;
-    final body = Rect.fromLTWH(w * 0.2, h * 0.3, w * 0.6, h * 0.42);
-    final line = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = w * 0.06
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
-    canvas.drawRRect(RRect.fromRectAndRadius(body, Radius.circular(w * 0.05)), line);
-    canvas.drawPath(
-      Path()
-        ..moveTo(body.left, body.top)
-        ..lineTo(body.center.dx, body.top + body.height * 0.55)
-        ..lineTo(body.right, body.top),
-      line,
-    );
+    final w = s.width;
+    canvas.drawRect(Offset.zero & s, Paint()..color = night);
+    final p = Paint()..color = accent;
+    // The plus of an adding column, the single rule beside it, then the double rule.
+    canvas.drawRect(Rect.fromLTWH(w * 0.20, w * 0.30, w * 0.16, w * 0.06), p);
+    canvas.drawRect(Rect.fromLTWH(w * 0.25, w * 0.25, w * 0.06, w * 0.16), p);
+    canvas.drawRect(Rect.fromLTWH(w * 0.44, w * 0.30, w * 0.36, w * 0.06), p);
+    canvas.drawRect(Rect.fromLTWH(w * 0.20, w * 0.58, w * 0.60, w * 0.06), p);
+    canvas.drawRect(Rect.fromLTWH(w * 0.20, w * 0.68, w * 0.60, w * 0.06), p);
   }
 
   @override
-  bool shouldRepaint(_MarkPainter old) => false;
+  bool shouldRepaint(MarkPainter old) => false;
 }

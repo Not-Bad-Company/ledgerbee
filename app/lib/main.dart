@@ -1,8 +1,13 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'dart:io';
+
 import 'api.dart';
+import 'scan.dart';
 import 'notify.dart';
 import 'screens/assets.dart';
 import 'screens/bank.dart';
@@ -66,7 +71,8 @@ final destinations = <Destination>[
 ];
 
 /// Lets any screen switch the main section (the overview's cards do).
-final ValueNotifier<int> currentSection = ValueNotifier(0);
+// Debug builds can open on another section (screenshots): --dart-define=BOEK_SECTION=2.
+final ValueNotifier<int> currentSection = ValueNotifier(kDebugMode ? const int.fromEnvironment('BOEK_SECTION') : 0);
 
 int sectionIndex(String label) => destinations.indexWhere((d) => d.label == label);
 
@@ -78,16 +84,39 @@ class Shell extends StatefulWidget {
 }
 
 class _ShellState extends State<Shell> with WidgetsBindingObserver {
+  static const _share = MethodChannel('boekhouding/share');
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     Api.instance.flush();
     Notify.scheduleDeadlines();
+    if (Platform.isAndroid) {
+      // A file shared to the app while it runs, or the one that started it.
+      // See MainActivity.kt: it copies the shared file and sends its path.
+      _share.setMethodCallHandler((call) async {
+        if (call.method == 'shared') await _shared(call.arguments as String?);
+      });
+      _share.invokeMethod<String>('initial').then(_shared);
+    }
+  }
+
+  Future<void> _shared(String? path) async {
+    if (path == null || !mounted) return;
+    try {
+      final cap = await captureFile(await File(path).readAsBytes(), path.split('/').last, path);
+      if (!mounted) return;
+      currentSection.value = sectionIndex('Kosten');
+      await openCapture(context, cap);
+    } catch (e) {
+      if (mounted) showError(context, friendlyError(e));
+    }
   }
 
   @override
   void dispose() {
+    if (Platform.isAndroid) _share.setMethodCallHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

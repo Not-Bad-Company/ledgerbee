@@ -15,7 +15,7 @@ class OverviewScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(toolbarHeight: 8),
+      appBar: AppBar(toolbarHeight: 8, shape: const Border()),
       floatingActionButton: const ScanButton(),
       body: Loaded<Map>(
         load: () async => await Api.instance.get('/api/overview') as Map,
@@ -116,7 +116,8 @@ class OverviewScreen extends StatelessWidget {
   static String _summary(int tasks) => tasks == 0 ? 'Alles is bij. Niets dat op je wacht.' : tasks == 1 ? 'Eén ding wacht op je.' : '$tasks dingen wachten op je.';
 }
 
-/// The next deadline, drawn as the blue envelope it stands for.
+/// The next deadline: a ruled panel, amber along the top once it is two
+/// weeks away, the days left as the one big figure on the screen.
 class _Envelope extends StatelessWidget {
   final Map deadline;
   final Map quarter;
@@ -128,40 +129,44 @@ class _Envelope extends StatelessWidget {
     final btw = deadline['kind'] == 'btw_q';
     final total = quarter['total_cents'] as int;
     final t = Theme.of(context).textTheme;
-    const onEnvelope = Colors.white;
-    final soft = Colors.white.withValues(alpha: 0.72);
+    final urgent = days <= 14;
     return Material(
-      color: envelope,
-      borderRadius: BorderRadius.circular(20),
+      color: surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(2)), side: BorderSide(color: rule)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => currentSection.value = sectionIndex('Aangifte'),
-        child: CustomPaint(
-          painter: _FlapPainter(),
+        child: Container(
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: urgent ? accent : Colors.transparent, width: 2))),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(deadline['title'] as String, style: t.titleMedium?.copyWith(color: onEnvelope, fontWeight: FontWeight.w700)),
-              Text('Uiterlijk ${longDate(deadline['due'] as String)}', style: t.bodyMedium?.copyWith(color: soft)),
-              const SizedBox(height: 28),
+              Text('Volgende deadline', style: labelStyle(color: urgent ? accent : muted)),
+              const SizedBox(height: 6),
+              Text(deadline['title'] as String, style: t.titleLarge),
+              Text('Uiterlijk ${longDate(deadline['due'] as String)}', style: t.bodyMedium?.copyWith(color: muted)),
+              const SizedBox(height: 32),
               Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Expanded(
                   child: Text.rich(
                     TextSpan(children: [
-                      TextSpan(text: days <= 0 ? (days == 0 ? 'Vandaag' : 'Verlopen') : '$days', style: amountStyle(context, size: 56, weight: FontWeight.w800, color: onEnvelope).copyWith(height: 1, letterSpacing: -2)),
-                      if (days > 0) TextSpan(text: days == 1 ? '  dag' : '  dagen', style: t.titleMedium?.copyWith(color: soft)),
+                      TextSpan(text: days <= 0 ? (days == 0 ? 'Vandaag' : 'Verlopen') : '$days', style: figureStyle(size: 64, color: urgent ? accent : fg)),
+                      if (days > 0) TextSpan(text: days == 1 ? ' dag' : ' dagen', style: labelStyle(size: 14)),
                     ]),
                   ),
                 ),
                 if (btw)
                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Text(total >= 0 ? 'Te betalen' : 'Terug', style: t.bodySmall?.copyWith(color: soft)),
-                    Text(eur(total.abs()), style: amountStyle(context, size: 20, weight: FontWeight.w700, color: onEnvelope)),
+                    Text(total >= 0 ? 'Te betalen' : 'Terug', style: labelStyle()),
+                    const SizedBox(height: 2),
+                    Text(eur(total.abs()), style: figureStyle(size: 24)),
                   ]),
               ]),
               if (btw && (quarter['warnings'] as List).isNotEmpty) ...[
-                const SizedBox(height: 12),
-                for (final w in (quarter['warnings'] as List)) Text(w as String, style: t.bodySmall?.copyWith(color: soft)),
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 10),
+                for (final w in (quarter['warnings'] as List)) Text(w as String, style: t.bodySmall),
               ],
             ]),
           ),
@@ -169,31 +174,6 @@ class _Envelope extends StatelessWidget {
       ),
     );
   }
-}
-
-class _FlapPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final flap = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width / 2, size.height * 0.42)
-      ..lineTo(size.width, 0)
-      ..close();
-    canvas.drawPath(flap, Paint()..color = Colors.white.withValues(alpha: 0.06));
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, 0)
-        ..lineTo(size.width / 2, size.height * 0.42)
-        ..lineTo(size.width, 0),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.14)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_FlapPainter old) => false;
 }
 
 class _Task extends StatelessWidget {
