@@ -1,26 +1,26 @@
 [Unit]
-Description=Boekhouding (Not Bad Company bookkeeping server)
-# Listens on the Pi's Tailscale address only (BOEK_BIND), so it waits for it.
+Description=Boekhouding (self-hosted bookkeeping server)
+# If BOEK_BIND is a Tailscale address, the server has to wait for it.
 After=network-online.target tailscaled.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=daanhpi
-Group=daanhpi
-WorkingDirectory=/home/daanhpi/projects/work/boekhouding/server
-ExecStart=/home/daanhpi/projects/work/boekhouding/server/target/release/boekhouding serve
+# Adjust the user and /opt/boekhouding to where you cloned the repo.
+User=boekhouding
+Group=boekhouding
+WorkingDirectory=/opt/boekhouding/server
+ExecStart=/opt/boekhouding/server/target/release/boekhouding serve
 Restart=always
 RestartSec=2
-# BOEK_SECRET, BOEK_DATA, BOEK_IBAN, BREVO_API_KEY, EMAIL_FROM_*: server/.env.
-EnvironmentFile=/home/daanhpi/projects/work/boekhouding/server/.env
-# The company's public details (NBC_*), shared with every Not Bad Company site.
-EnvironmentFile=-/home/daanhpi/projects/work/.env
+# BOEK_SECRET, BOEK_DATA, BOEK_BIND, BREVO_API_KEY, EMAIL_FROM_*: see server/.env.example.
+EnvironmentFile=/opt/boekhouding/server/.env
 MemoryMax=512M
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/home/daanhpi/projects/work/boekhouding/server/data
+ProtectHome=read-only
+ReadWritePaths=/opt/boekhouding/server/data
 
 [Install]
 WantedBy=multi-user.target

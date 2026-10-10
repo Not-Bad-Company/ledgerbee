@@ -17,7 +17,7 @@ pub fn configured() -> bool {
 pub async fn send(to: &[&str], subject: &str, html: &str, attachment: Option<Attachment>) -> Result<()> {
     let key = crate::config::brevo_key().context("BREVO_API_KEY ontbreekt")?;
     let from = std::env::var("EMAIL_FROM_ADDRESS").context("EMAIL_FROM_ADDRESS ontbreekt")?;
-    let name = std::env::var("EMAIL_FROM_NAME").unwrap_or_else(|_| "Not Bad Company".into());
+    let name = std::env::var("EMAIL_FROM_NAME").unwrap_or_else(|_| "Boekhouding".into());
     let mut body = json!({
         "sender": {"email": from, "name": name},
         "to": to.iter().filter(|t| !t.is_empty()).map(|t| json!({"email": t})).collect::<Vec<_>>(),

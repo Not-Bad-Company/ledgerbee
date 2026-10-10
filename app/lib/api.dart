@@ -23,6 +23,19 @@ class ApiException implements Exception {
 }
 
 const _uuid = Uuid();
+
+/// Hosts where plain http is acceptable: the device itself, the home network,
+/// and Tailscale (whose WireGuard tunnel already encrypts everything).
+bool privateHost(String host) {
+  final h = host.toLowerCase();
+  if (h == 'localhost' || !h.contains('.') || h.endsWith('.local') || h.endsWith('.lan') || h.endsWith('.home.arpa') || h.endsWith('.ts.net')) {
+    return true;
+  }
+  final p = h.split('.').map(int.tryParse).toList();
+  if (p.length != 4 || p.any((n) => n == null || n < 0 || n > 255)) return false;
+  final a = p[0]!, b = p[1]!;
+  return a == 10 || a == 127 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168) || (a == 100 && b >= 64 && b <= 127);
+}
 String newId() => _uuid.v4();
 
 class Api extends ChangeNotifier {
@@ -79,6 +92,12 @@ class Api extends ChangeNotifier {
     var url = server.trim();
     if (!url.startsWith('http')) url = 'https://$url';
     url = url.replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) throw ApiException(400, 'Dat is geen serveradres');
+    if (uri.scheme == 'http' && !privateHost(uri.host)) {
+      throw ApiException(400, 'Gebruik https: zonder versleuteling gaan je wachtwoord en gegevens leesbaar over internet. '
+          'Http mag alleen binnen je eigen netwerk of Tailscale.');
+    }
     final res = await _send('POST', '$url/api/login', body: {
       'email': email.trim(),
       'password': password,

@@ -1,5 +1,5 @@
 name: boekhouding
-description: "Boekhouding for Not Bad Company."
+description: "Self-hosted bookkeeping for a Dutch eenmanszaak."
 publish_to: 'none'
 version: 0.1.0+1
 

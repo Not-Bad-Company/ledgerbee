@@ -84,7 +84,7 @@ pub fn year(conn: &Connection, year: i32) -> Result<Vec<u8>> {
     zip.start_file("kosten.csv", opt)?;
     zip.write_all(&csv_of(&rows)?)?;
 
-    let company = config::company();
+    let company = config::company(conn);
     let mut rows = vec![["nummer", "datum", "vervaldatum", "klant", "status", "excl. btw", "btw", "totaal", "betaald op"].map(String::from).to_vec()];
     for inv in invoices::final_between(conn, &q.from.clone().unwrap(), &q.to.clone().unwrap()).map_err(err)? {
         let client = inv["client_id"].as_str().and_then(|c| entities::get(conn, &entities::CLIENTS, c).ok().flatten()).unwrap_or(Value::Null);

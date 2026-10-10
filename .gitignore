@@ -9,3 +9,4 @@ app/android/local.properties
 app/android/key.properties
 *.jks
 *.keystore
+app/dart_defines.local.json

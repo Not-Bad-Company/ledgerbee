@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- HTTPS everywhere, except the server's Tailscale address: that link is
-     already WireGuard-encrypted and has no public name for a certificate. -->
+<!-- Cleartext is allowed at this level because a self-hosted server can live
+     at any home-network or Tailscale address. The app itself refuses plain
+     http to anything else (privateHost in lib/api.dart). -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">100.66.214.122</domain>
-        <domain includeSubdomains="false">daanhpi</domain>
-        <!-- Debugging over adb reverse. -->
-        <domain includeSubdomains="false">127.0.0.1</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

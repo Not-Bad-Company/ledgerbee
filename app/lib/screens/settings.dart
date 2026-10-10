@@ -1,5 +1,5 @@
-// Company details (read-only: they come from the shared .env), the
-// startersaftrek, categories, devices, and signing out.
+// Company details (printed on invoices), the startersaftrek, categories,
+// devices, and signing out.
 
 import 'package:flutter/material.dart';
 
@@ -35,9 +35,14 @@ class SettingsScreen extends StatelessWidget {
                     ListTile(dense: true, title: const Text('KvK-nummer'), trailing: Text(v('kvk'))),
                     ListTile(dense: true, title: const Text('Btw-id'), trailing: Text(v('btw'))),
                     ListTile(dense: true, title: const Text('IBAN op facturen'), trailing: Text(v('iban'))),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
-                      child: Text('Deze gegevens komen uit de gedeelde .env van Not Bad Company (NBC_*) en BOEK_IBAN op de server.', style: TextStyle(fontSize: 12)),
+                    ListTile(
+                      leading: const Icon(Icons.edit_outlined),
+                      title: const Text('Gegevens aanpassen'),
+                      subtitle: const Text('Ze staan op elke factuur'),
+                      onTap: () async {
+                        await _editCompany(context, c, settings);
+                        reload();
+                      },
                     ),
                   ]),
                 ),
@@ -135,6 +140,54 @@ class SettingsScreen extends StatelessWidget {
             ),
           ]);
         },
+      ),
+    );
+  }
+
+  static const _companyFields = [
+    ('name', 'Bedrijfsnaam', TextInputType.text),
+    ('owner', 'Je naam', TextInputType.name),
+    ('street', 'Straat en huisnummer', TextInputType.streetAddress),
+    ('postcode', 'Postcode', TextInputType.text),
+    ('city', 'Plaats', TextInputType.text),
+    ('kvk', 'KvK-nummer', TextInputType.number),
+    ('btw', 'Btw-identificatienummer', TextInputType.text),
+    ('email', 'E-mail', TextInputType.emailAddress),
+    ('phone', 'Telefoon', TextInputType.phone),
+    ('iban', 'IBAN', TextInputType.text),
+  ];
+
+  static Future<void> _editCompany(BuildContext context, Map current, Map settings) async {
+    final ctl = {
+      for (final (k, _, _) in _companyFields) k: TextEditingController(text: (current[k] as String?) ?? ''),
+    };
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Onderneming'),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              for (final (k, label, type) in _companyFields)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(controller: ctl[k], decoration: InputDecoration(labelText: label), keyboardType: type, textCapitalization: k == 'btw' || k == 'iban' || k == 'postcode' ? TextCapitalization.characters : TextCapitalization.none),
+                ),
+            ]),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuleren')),
+          FilledButton(
+            onPressed: () async {
+              final body = {for (final (k, _, _) in _companyFields) 'company_$k': ctl[k]!.text.trim()};
+              final ok = await guard(ctx, () => Api.instance.put('/api/settings', body));
+              if (ok != null && ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Bewaren'),
+          ),
+        ],
       ),
     );
   }

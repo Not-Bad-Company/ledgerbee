@@ -1,15 +1,16 @@
 //! Settings from the environment.
 //!
 //! Secrets and paths come from `server/.env` (or the systemd unit's
-//! `EnvironmentFile`). The company's public details (name, KvK, btw-id,
-//! address) come from the one `.env` above every Not Bad Company project, the
-//! same file the websites read, so the invoices and krentenweger.nl cannot
-//! disagree about the KvK number.
+//! `EnvironmentFile`). The company's details (name, KvK, btw-id, address)
+//! are entered in the app and stored in the database; `BOEK_COMPANY_*`
+//! variables, or `NBC_*` ones in a shared `.env` further up the tree (how
+//! Not Bad Company keeps one copy for all its projects), fill in whatever
+//! the app has not set.
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-/// Loads `./.env`, then the shared company file: `NBC_ENV_FILE`, or the first
+/// Loads `./.env`, then an optional shared company file: `NBC_ENV_FILE`, or the first
 /// `.env` that sets `NBC_NAME` walking up from the working directory. Values
 /// already in the environment win.
 pub fn load() {
@@ -64,6 +65,18 @@ mod tests {
         let got = super::parse_env("# c\nNBC_NAME=Not Bad Company\nexport A=\"x y\"\nB='z'\nbad line\n");
         assert_eq!(got, vec![("NBC_NAME".into(), "Not Bad Company".into()), ("A".into(), "x y".into()), ("B".into(), "z".into())]);
     }
+
+    #[test]
+    fn the_app_setting_beats_the_environment() {
+        let pool = crate::db::memory();
+        let c = pool.get().unwrap();
+        std::env::set_var("BOEK_COMPANY_CITY", "Utrecht");
+        assert_eq!(super::company(&c).city, "Utrecht");
+        crate::db::set_setting(&c, "company_city", "Zwolle").unwrap();
+        assert_eq!(super::company(&c).city, "Zwolle");
+        crate::db::set_setting(&c, "company_city", " ").unwrap();
+        assert_eq!(super::company(&c).city, "Utrecht", "an emptied setting falls back again");
+    }
 }
 
 pub fn data_dir() -> PathBuf {
@@ -101,6 +114,21 @@ fn real(v: String) -> String {
     }
 }
 
+/// The company fields: struct field, settings key, and the environment
+/// variables that fill it when the setting is empty.
+pub const COMPANY_FIELDS: &[(&str, &[&str])] = &[
+    ("name", &["BOEK_COMPANY_NAME", "NBC_NAME"]),
+    ("owner", &["BOEK_COMPANY_OWNER", "NBC_FOUNDER"]),
+    ("street", &["BOEK_COMPANY_STREET", "NBC_STREET"]),
+    ("postcode", &["BOEK_COMPANY_POSTCODE", "NBC_POSTCODE"]),
+    ("city", &["BOEK_COMPANY_CITY", "NBC_CITY"]),
+    ("kvk", &["BOEK_COMPANY_KVK", "NBC_KVK"]),
+    ("btw", &["BOEK_COMPANY_BTW", "NBC_BTW"]),
+    ("email", &["BOEK_COMPANY_EMAIL", "NBC_EMAIL"]),
+    ("phone", &["BOEK_COMPANY_PHONE", "NBC_PHONE"]),
+    ("iban", &["BOEK_IBAN"]),
+];
+
 #[derive(serde::Serialize, Clone, Debug, Default)]
 pub struct Company {
     pub name: String,
@@ -115,27 +143,34 @@ pub struct Company {
     pub iban: String,
 }
 
-pub fn company() -> Company {
+pub fn company(conn: &rusqlite::Connection) -> Company {
+    let get = |field: &str| -> String {
+        let (_, envs) = COMPANY_FIELDS.iter().find(|(f, _)| *f == field).expect("company field");
+        let set = crate::db::setting(conn, &format!("company_{field}")).map(|v| v.trim().to_string()).unwrap_or_default();
+        if !set.is_empty() {
+            return set;
+        }
+        envs.iter().map(|k| real(var(k))).find(|v| !v.is_empty()).unwrap_or_default()
+    };
     Company {
-        name: var("NBC_NAME"),
-        owner: var("NBC_FOUNDER"),
-        street: var("NBC_STREET"),
-        postcode: var("NBC_POSTCODE"),
-        city: var("NBC_CITY"),
-        kvk: real(var("NBC_KVK")),
-        btw: real(var("NBC_BTW")),
-        email: var("NBC_EMAIL"),
-        phone: var("NBC_PHONE"),
-        // Not public in the shared file on purpose: the server's own .env.
-        iban: var("BOEK_IBAN"),
+        name: get("name"),
+        owner: get("owner"),
+        street: get("street"),
+        postcode: get("postcode"),
+        city: get("city"),
+        kvk: get("kvk"),
+        btw: get("btw"),
+        email: get("email"),
+        phone: get("phone"),
+        iban: get("iban"),
     }
 }
 
-/// Where reminders go.
-pub fn owner_email() -> String {
+/// Where reminders go: BOEK_OWNER_EMAIL, else the company's address.
+pub fn owner_email(conn: &rusqlite::Connection) -> String {
     let own = var("BOEK_OWNER_EMAIL");
     if own.is_empty() {
-        var("NBC_EMAIL")
+        company(conn).email
     } else {
         own
     }

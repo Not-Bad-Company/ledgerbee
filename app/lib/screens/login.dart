@@ -11,8 +11,8 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _server = TextEditingController(text: Api.instance.baseUrl.isEmpty ? 'http://100.66.214.122:8090' : Api.instance.baseUrl);
-  final _email = TextEditingController(text: 'daanhessen@notbadcompany.com');
+  final _server = TextEditingController(text: Api.instance.baseUrl.isEmpty ? const String.fromEnvironment('BOEK_SERVER') : Api.instance.baseUrl);
+  final _email = TextEditingController(text: const String.fromEnvironment('BOEK_EMAIL'));
   final _password = TextEditingController();
   final _code = TextEditingController();
   bool _busy = false;
@@ -37,10 +37,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   const AppMark(size: 56),
                   const SizedBox(height: 20),
-                  Text('Hoi Daan', style: t.headlineMedium),
-                  Text('Log in op de administratie van Not Bad Company.', style: t.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  Text('Boekhouding', style: t.headlineMedium),
+                  Text('Log in op je eigen server.', style: t.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 32),
-                  TextField(controller: _server, decoration: const InputDecoration(labelText: 'Server', helperText: 'De Pi, via Tailscale'), keyboardType: TextInputType.url),
+                  TextField(controller: _server, decoration: const InputDecoration(labelText: 'Server', hintText: 'https://boeken.jouwdomein.nl', helperText: 'Http alleen binnen je eigen netwerk of Tailscale'), keyboardType: TextInputType.url),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _email,

@@ -4,10 +4,11 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-User=daanhpi
-Group=daanhpi
-WorkingDirectory=/home/daanhpi/projects/work/boekhouding
-EnvironmentFile=/home/daanhpi/projects/work/boekhouding/server/.env
-ExecStart=/home/daanhpi/projects/work/boekhouding/scripts/backup.sh
+# Same user and paths as boekhouding.service; BOEK_BACKUP_DIR must be writable by it.
+User=boekhouding
+Group=boekhouding
+WorkingDirectory=/opt/boekhouding
+EnvironmentFile=/opt/boekhouding/server/.env
+ExecStart=/opt/boekhouding/scripts/backup.sh
 Nice=10
 IOSchedulingClass=idle

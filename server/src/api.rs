@@ -78,12 +78,16 @@ async fn login(State(s): State<AppState>, Json(b): Json<LoginBody>) -> ApiResult
 }
 
 async fn me(State(s): State<AppState>, d: Device) -> ApiResult<Json<Value>> {
-    let devices = with_db(&s, |c| Ok(entities::query_json(c, "SELECT id, name, created_at, last_seen FROM devices ORDER BY last_seen DESC", &[], &[])?)).await?;
+    let (devices, company, owner_email) = with_db(&s, |c| {
+        let devices = entities::query_json(c, "SELECT id, name, created_at, last_seen FROM devices ORDER BY last_seen DESC", &[], &[])?;
+        Ok((devices, config::company(c), config::owner_email(c)))
+    })
+    .await?;
     Ok(Json(json!({
         "device_id": d.id,
-        "company": config::company(),
+        "company": company,
         "mail_configured": crate::mail::configured(),
-        "owner_email": config::owner_email(),
+        "owner_email": owner_email,
         "devices": devices,
     })))
 }
@@ -270,8 +274,8 @@ pub fn invoice_file_name(inv: &Value) -> String {
 }
 
 async fn invoice_pdf(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Response> {
-    let (inv, client) = with_db(&s, move |c| invoice_with_client(c, &id)).await?;
-    let bytes = pdf::render(&config::company(), &inv, &client)?;
+    let (inv, client, company) = with_db(&s, move |c| invoice_with_client(c, &id).map(|(i, cl)| (i, cl, config::company(c)))).await?;
+    let bytes = pdf::render(&company, &inv, &client)?;
     let disposition = format!("inline; filename=\"{}\"", invoice_file_name(&inv));
     Ok(([(header::CONTENT_TYPE, "application/pdf".to_string()), (header::CONTENT_DISPOSITION, disposition)], bytes).into_response())
 }
@@ -279,7 +283,8 @@ async fn invoice_pdf(State(s): State<AppState>, _d: Device, Path(id): Path<Strin
 /// E-mails a final invoice to the client, with a copy to the owner.
 async fn send_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
     let iid = id.clone();
-    let (inv, client) = with_db(&s, move |c| invoice_with_client(c, &iid)).await?;
+    let (inv, client, company, owner) =
+        with_db(&s, move |c| invoice_with_client(c, &iid).map(|(i, cl)| (i, cl, config::company(c), config::owner_email(c)))).await?;
     if inv["status"] == "concept" {
         return Err(ApiError::bad("Maak de factuur eerst definitief"));
     }
@@ -290,7 +295,6 @@ async fn send_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<Stri
     if !crate::mail::configured() {
         return Err(ApiError::bad("E-mail is niet ingesteld op de server (BREVO_API_KEY, EMAIL_FROM_ADDRESS)"));
     }
-    let company = config::company();
     let bytes = pdf::render(&company, &inv, &client)?;
     let total = invoices::totals_of(&inv).incl_cents;
     let number = inv["number"].as_str().unwrap_or("").to_string();
@@ -304,7 +308,6 @@ async fn send_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<Stri
         crate::mail::escape(&company.owner),
         crate::mail::escape(&company.name),
     );
-    let owner = config::owner_email();
     crate::mail::send(
         &[&to, &owner],
         &format!("Factuur {} van {}", number, company.name),
@@ -419,7 +422,7 @@ async fn overview(State(s): State<AppState>, _d: Device) -> ApiResult<Json<Value
                 "year": ib.year, "omzet_cents": ib.omzet_cents, "kosten_cents": ib.kosten_cents + ib.afschrijving_cents + ib.km_cents,
                 "winst_cents": ib.winst_cents, "uren": ib.uren, "uren_nodig": ib.uren_nodig, "km": ib.km,
             },
-            "company": config::company(),
+            "company": config::company(c),
         }))
     })
     .await
@@ -430,13 +433,22 @@ async fn deadlines(State(s): State<AppState>, _d: Device) -> ApiResult<Json<Valu
     with_db(&s, |c| Ok(json!(reminders::deadlines(c, db::today())?))).await.map(Json)
 }
 
-const SETTINGS: &[&str] = &["start_date", "startersaftrek"];
+const SETTINGS: &[&str] = &[
+    "start_date", "startersaftrek",
+    "company_name", "company_owner", "company_street", "company_postcode", "company_city",
+    "company_kvk", "company_btw", "company_email", "company_phone", "company_iban",
+];
 
 async fn get_settings(State(s): State<AppState>, _d: Device) -> ApiResult<Json<Value>> {
     with_db(&s, |c| {
         let mut out = serde_json::Map::new();
         out.insert("start_date".into(), json!(reminders::start_date(c).to_string()));
         out.insert("startersaftrek".into(), json!(db::setting(c, "startersaftrek").unwrap_or_else(|| "ja".into())));
+        // What the app has stored; `company` in /api/me is the result with the env filled in.
+        for (field, _) in config::COMPANY_FIELDS {
+            let key = format!("company_{field}");
+            out.insert(key.clone(), json!(db::setting(c, &key).unwrap_or_default()));
+        }
         Ok(Value::Object(out))
     })
     .await
@@ -451,7 +463,10 @@ async fn put_settings(State(s): State<AppState>, _d: Device, Json(body): Json<Va
             }
             let v = v.as_str().ok_or_else(|| ApiError::bad("Tekst verwacht"))?;
             if k == "start_date" && chrono::NaiveDate::parse_from_str(v, "%Y-%m-%d").is_err() {
-                return Err(ApiError::bad("Datum als 2026-10-06"));
+                return Err(ApiError::bad("Datum als 2026-01-31"));
+            }
+            if k == "company_kvk" && !v.trim().is_empty() && !(v.trim().len() == 8 && v.trim().chars().all(|c| c.is_ascii_digit())) {
+                return Err(ApiError::bad("Een KvK-nummer heeft 8 cijfers"));
             }
             db::set_setting(c, k, v)?;
             entities::audit(c, "settings", k, "update", None, Some(&json!(v)))?;

@@ -60,8 +60,8 @@ class OverviewScreen extends StatelessWidget {
                   ]),
                 ),
                 if ((company['btw'] as String).isEmpty)
-                  const Notice('Het btw-identificatienummer ontbreekt nog. Facturen moeten het vermelden: zet NBC_BTW in de gedeelde .env zodra de '
-                      'Belastingdienst het stuurt, en herstart de server.'),
+                  const Notice('Het btw-identificatienummer ontbreekt nog. Facturen moeten het vermelden: vul het in bij Instellingen → Onderneming '
+                      'zodra de Belastingdienst het stuurt.'),
                 if (next != null) Padding(padding: const EdgeInsets.only(bottom: 20), child: _Envelope(deadline: next, quarter: quarter)),
                 if (deadlines.length > 1)
                   Section(

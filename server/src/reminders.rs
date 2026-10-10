@@ -26,11 +26,13 @@ fn filed(conn: &Connection, kind: &str, key: &str) -> bool {
     conn.query_row("SELECT status = 'ingediend' FROM periods WHERE kind = ?1 AND key = ?2", [kind, key], |r| r.get(0)).unwrap_or(false)
 }
 
-/// The business's start: the setting, or the KvK registration date.
+/// The business's start: the setting, else the day the account was made.
 pub fn start_date(conn: &Connection) -> NaiveDate {
+    let parse = |s: String| NaiveDate::parse_from_str(s.get(..10).unwrap_or(&s), "%Y-%m-%d").ok();
     db::setting(conn, "start_date")
-        .and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok())
-        .unwrap_or_else(|| NaiveDate::from_ymd_opt(2026, 10, 6).expect("date"))
+        .and_then(parse)
+        .or_else(|| conn.query_row("SELECT min(created_at) FROM users", [], |r| r.get::<_, Option<String>>(0)).ok().flatten().and_then(parse))
+        .unwrap_or_else(db::today)
 }
 
 /// Every btw quarter since the start whose deadline is less than a year away
@@ -151,8 +153,9 @@ pub fn digest(conn: &Connection, today: NaiveDate) -> ApiResult<Option<(String, 
     }
     let subject = subject.unwrap_or_else(|| "Boekhouding: openstaande punten".into());
     let html = format!(
-        "<p>Goedemorgen,</p><ul>{}</ul><p style=\"color:#666\">Boekhouding Not Bad Company</p>",
-        items.iter().map(|i| format!("<li>{i}</li>")).collect::<String>()
+        "<p>Goedemorgen,</p><ul>{}</ul><p style=\"color:#666\">Boekhouding {}</p>",
+        items.iter().map(|i| format!("<li>{i}</li>")).collect::<String>(),
+        crate::mail::escape(&crate::config::company(conn).name),
     );
     Ok(Some((subject, html)))
 }
@@ -164,18 +167,18 @@ pub async fn run(pool: db::Pool) {
         if now.hour() >= 8 {
             let pool = pool.clone();
             let today = now.date_naive();
-            let job = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<(String, String)>> {
+            let job = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<(String, String, String)>> {
                 let conn = pool.get()?;
                 if db::setting(&conn, "last_digest").as_deref() == Some(today.to_string().as_str()) {
                     return Ok(None);
                 }
                 db::set_setting(&conn, "last_digest", &today.to_string())?;
-                Ok(digest(&conn, today).map_err(|e| anyhow::anyhow!(e.1))?)
+                let to = crate::config::owner_email(&conn);
+                Ok(digest(&conn, today).map_err(|e| anyhow::anyhow!(e.1))?.map(|(s, h)| (s, h, to)))
             })
             .await;
             match job {
-                Ok(Ok(Some((subject, html)))) => {
-                    let to = crate::config::owner_email();
+                Ok(Ok(Some((subject, html, to)))) => {
                     if !crate::mail::configured() {
                         tracing::warn!("reminder not sent, e-mail is not configured: {subject}");
                     } else if let Err(e) = crate::mail::send(&[&to], &subject, &html, None).await {

@@ -1,4 +1,4 @@
-//! Boekhouding: the bookkeeping server for Not Bad Company.
+//! Boekhouding: a self-hosted bookkeeping server for a Dutch eenmanszaak.
 //!
 //!   boekhouding serve                 run the API (BOEK_BIND, default 127.0.0.1:8090)
 //!   boekhouding create-user <email>   make (or replace) the account; asks the password on stdin
@@ -25,7 +25,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(version, about = "Bookkeeping server for Not Bad Company")]
+#[command(version, about = "Self-hosted bookkeeping server for a Dutch eenmanszaak")]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,

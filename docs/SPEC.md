@@ -19,7 +19,12 @@ numbers:
   winst / aftrekposten overview per year;
 - remind before every deadline, on the phone and by e-mail.
 
-Non-goals: payroll, multiple users, filing directly with the
+Since 2026-10-10 the code is public under the Elastic License 2.0: anyone
+may self-host it for their own business; nobody may offer it as a hosted
+service. Each install stays single-user.
+
+Non-goals: payroll, multiple users per install, hosting other people's
+administration, filing directly with the
 Belastingdienst (no Digipoort; numbers are copied into Mijn Belastingdienst
 Zakelijk), double-entry ledger, iOS, web.
 
@@ -101,7 +106,7 @@ All money in integer cents. All dates ISO `YYYY-MM-DD`. Every table has
 - `periods` — kind (`btw_q`, `ib_year`), key (`2026-Q4`, `2026`), status
   (`open`, `ingediend`), filed_at, filed_numbers (JSON snapshot).
 - `audit_log` — table, row id, action, before JSON, after JSON, at.
-- `settings` — key/value: company details (from the NBC env), start date
+- `settings` — key/value: company details (entered in the app; `BOEK_COMPANY_*`/`NBC_*` env vars fill empty fields), start date
   (for startersaftrek), starter years used, reminder e-mail.
 
 A filed period locks every record dated inside it: the server refuses

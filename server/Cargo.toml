@@ -2,7 +2,9 @@
 name = "boekhouding"
 version = "0.1.0"
 edition = "2021"
-description = "Bookkeeping server for Not Bad Company"
+description = "Self-hosted bookkeeping for a Dutch eenmanszaak"
+license-file = "../LICENSE"
+publish = false
 
 [dependencies]
 axum = "0.7"
