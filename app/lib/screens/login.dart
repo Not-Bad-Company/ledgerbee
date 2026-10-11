@@ -37,7 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   const AppMark(size: 56),
                   const SizedBox(height: 20),
-                  Text('Boekhouding', style: t.headlineMedium),
+                  Text('Goudgulden', style: t.headlineMedium),
                   Text('Log in op je eigen server.', style: t.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 32),
                   TextField(controller: _server, decoration: const InputDecoration(labelText: 'Server', hintText: 'https://boeken.jouwdomein.nl', helperText: 'Http alleen binnen je eigen netwerk of Tailscale'), keyboardType: TextInputType.url),

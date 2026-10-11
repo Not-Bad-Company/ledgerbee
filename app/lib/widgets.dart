@@ -281,32 +281,23 @@ class Readable extends StatelessWidget {
       Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: BoxConstraints(maxWidth: max), child: child));
 }
 
-/// The app's mark: how an accountant closes a column. A single rule above
-/// the total, the double rule under it that says the sum is final. Amber on
-/// black, the same drawing as the launcher icon.
+/// The app's mark: the guilder sign, ƒ, in amber on black. Goudgulden is
+/// named after the Dutch gold guilder. Same drawing as the launcher icon.
 class AppMark extends StatelessWidget {
   final double size;
   const AppMark({super.key, this.size = 40});
 
   @override
-  Widget build(BuildContext context) =>
-      Align(alignment: AlignmentDirectional.centerStart, widthFactor: 1, heightFactor: 1, child: SizedBox.square(dimension: size, child: CustomPaint(painter: MarkPainter())));
-}
-
-class MarkPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size s) {
-    final w = s.width;
-    canvas.drawRect(Offset.zero & s, Paint()..color = night);
-    final p = Paint()..color = accent;
-    // The plus of an adding column, the single rule beside it, then the double rule.
-    canvas.drawRect(Rect.fromLTWH(w * 0.20, w * 0.30, w * 0.16, w * 0.06), p);
-    canvas.drawRect(Rect.fromLTWH(w * 0.25, w * 0.25, w * 0.06, w * 0.16), p);
-    canvas.drawRect(Rect.fromLTWH(w * 0.44, w * 0.30, w * 0.36, w * 0.06), p);
-    canvas.drawRect(Rect.fromLTWH(w * 0.20, w * 0.58, w * 0.60, w * 0.06), p);
-    canvas.drawRect(Rect.fromLTWH(w * 0.20, w * 0.68, w * 0.60, w * 0.06), p);
-  }
-
-  @override
-  bool shouldRepaint(MarkPainter old) => false;
+  Widget build(BuildContext context) => Align(
+        alignment: AlignmentDirectional.centerStart,
+        widthFactor: 1,
+        heightFactor: 1,
+        child: Container(
+          width: size,
+          height: size,
+          color: night,
+          alignment: Alignment.center,
+          child: Text('ƒ', style: TextStyle(fontFamily: 'Schibsted Grotesk Ext', fontSize: size * 0.78, fontWeight: FontWeight.w700, color: accent, height: 1)),
+        ),
+      );
 }

@@ -42,6 +42,11 @@ flutter:
           weight: 700
         - asset: assets/fonts/SchibstedGrotesk-800.ttf
           weight: 800
+    # Latin Extended, for the ƒ of the logo.
+    - family: Schibsted Grotesk Ext
+      fonts:
+        - asset: assets/fonts/SchibstedGroteskExt-700.ttf
+          weight: 700
     - family: Public Sans
       fonts:
         - asset: assets/fonts/PublicSans-400.ttf
