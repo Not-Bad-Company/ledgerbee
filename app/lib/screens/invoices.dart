@@ -165,7 +165,7 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
         ...inv,
         'note': _note.text.trim(),
         'lines': _lines.map((l) => l.toJson()).toList(),
-      }..removeWhere((k, _) => ['number', 'sent_at', 'paid_at', 'updated_at', 'reminded_at', 'reminders'].contains(k));
+      }..removeWhere((k, _) => ['number', 'sent_at', 'paid_at', 'updated_at', 'reminded_at', 'reminders', 'credit_of'].contains(k));
 
   Future<bool> _store() async {
     final saved = await guard(context, () => Api.instance.save('invoices', _concept ? _body : {'id': inv['id'], 'note': _note.text.trim(), 'created_at': inv['created_at']}));
@@ -234,6 +234,18 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
       });
       showInfo(context, 'Herinnering verstuurd');
     }
+  }
+
+  Future<void> _credit() async {
+    final ok = await confirm(
+      context,
+      'Een creditfactuur maken voor ${inv['number']}? Je krijgt een concept met dezelfde regels in min, dat je kunt aanpassen (bijvoorbeeld voor een gedeeltelijke creditering) en daarna definitief maakt.',
+      ok: 'Creditfactuur maken',
+    );
+    if (!ok || !mounted) return;
+    final res = await guard(context, () => Api.instance.post('/api/invoices/${inv['id']}/credit'));
+    if (res == null || !mounted) return;
+    await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => InvoiceEditor(invoice: Map<String, dynamic>.from(res as Map))));
   }
 
   bool get _overdue => inv['status'] == 'verzonden' && ((inv['due_date'] as String?) ?? '').compareTo(today()) < 0;
@@ -366,6 +378,8 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
                 else
                   OutlinedButton(onPressed: () => _paid(false), child: const Text('Toch niet betaald')),
                 OutlinedButton(onPressed: _busy ? null : () => _act(() => _storeAndSay('Notitie bewaard')), child: const Text('Notitie bewaren')),
+                if ((inv['credit_of'] as String? ?? '').isEmpty)
+                  TextButton.icon(onPressed: _busy ? null : () => _act(_credit), icon: const Icon(Icons.undo), label: const Text('Crediteren')),
               ]),
             const SizedBox(height: 32),
           ]),

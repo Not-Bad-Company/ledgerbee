@@ -47,6 +47,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/invoices/:id/pdf", get(invoice_pdf))
         .route("/api/invoices/:id/send", post(send_invoice))
         .route("/api/invoices/:id/remind", post(remind_invoice))
+        .route("/api/invoices/:id/credit", post(credit_invoice))
         .route("/api/bank/import", post(bank_import))
         .route("/api/bank/suggestions", get(bank_suggestions))
         .route("/api/bank/missing", get(bank_missing))
@@ -236,6 +237,10 @@ async fn download(_d: Device, Path(sha): Path<String>) -> ApiResult<Response> {
     let bytes = tokio::fs::read(p).await.map_err(|_| ApiError::not_found())?;
     let kind = files::sniff(&bytes);
     Ok(([(header::CONTENT_TYPE, kind), (header::CACHE_CONTROL, "private, max-age=31536000, immutable")], bytes).into_response())
+}
+
+async fn credit_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    with_db(&s, move |c| invoices::credit(c, &id)).await.map(Json)
 }
 
 async fn finalize(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {

@@ -185,6 +185,9 @@ CREATE INDEX trips_date ON trips(date);
 -- Payment reminders for overdue invoices.
 ALTER TABLE invoices ADD COLUMN reminded_at TEXT;
 ALTER TABLE invoices ADD COLUMN reminders INTEGER NOT NULL DEFAULT 0;
+"#, r#"
+-- A credit invoice points at the invoice it corrects.
+ALTER TABLE invoices ADD COLUMN credit_of TEXT;
 "#];
 
 /// Categories every administration starts with. `ib_group` is the cost group

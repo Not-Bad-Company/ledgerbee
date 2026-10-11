@@ -11,7 +11,7 @@ and Jortt for one eenmanszaak. Ordered by what matters most; sources in
 - [x] **Btw check before filing:** tap a rubriek to see the invoices and
       costs behind it
 - [x] **First run:** ask for the company details and IBAN before anything else
-- [ ] **Quarter checklist:** what's still missing for this quarter (unconfirmed
+- [x] **Quarter checklist:** what's still missing for this quarter (unconfirmed
       costs, payments without a bon, concept invoices), in one place
 - [x] **Invoices people pay faster:** payment reference, an EPC QR code
       ("scan to pay") on the PDF, and a reminder e-mail for overdue invoices
@@ -22,7 +22,7 @@ and Jortt for one eenmanszaak. Ordered by what matters most; sources in
 - [ ] Recurring invoices (monthly retainer, hosting)
 - [ ] Receipts by e-mail: an IMAP mailbox the server reads, so forwarding a
       receipt is enough
-- [ ] Credit invoices (creditfacturen) for corrections
+- [x] Credit invoices (creditfacturen) for corrections
 - [ ] UBL 2.1 / NLCIUS export of sales invoices (Peppol-ready, no transmission)
 - [ ] Web version of the app, served by the server itself
 

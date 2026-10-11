@@ -141,7 +141,8 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
     }
 
     // Invoice facts.
-    p.text("Factuur", 22.0, 20.0, 195.0, true);
+    let is_credit = !invoice["credit_of"].as_str().unwrap_or("").is_empty();
+    p.text(if is_credit { "Creditfactuur" } else { "Factuur" }, 22.0, 20.0, 195.0, true);
     let facts = [
         ("Factuurnummer", number.to_string()),
         ("Factuurdatum", nl_date(invoice["date"].as_str().unwrap_or(""))),
@@ -209,7 +210,9 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
         p.text(n, 9.0, 20.0, ly, true);
         ly -= 6.0;
     }
-    let pay = if company.iban.is_empty() {
+    let pay = if t.incl_cents < 0 {
+        format!("Dit bedrag van {} wordt verrekend met een openstaande factuur of aan je teruggestort.", eur(-t.incl_cents))
+    } else if company.iban.is_empty() {
         format!("Graag het bedrag van {} vóór {} overmaken, onder vermelding van {}.", eur(t.incl_cents), nl_date(invoice["due_date"].as_str().unwrap_or("")), number)
     } else {
         format!(

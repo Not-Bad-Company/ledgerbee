@@ -83,6 +83,47 @@ pub fn final_between(conn: &Connection, from: &str, to: &str) -> ApiResult<Vec<V
 
 /// Gives a concept its number (`YYYY-NNN`, the next in its year, never
 /// reused) and makes it final. Its lines and amounts cannot change after this.
+/// A concept credit invoice for a final one: the same client, scheme and
+/// lines with the quantities negated, dated today. Finalising it gives it the
+/// next number; the reports count its negative amounts in its own quarter,
+/// which is how a correction is meant to land.
+pub fn credit(conn: &mut Connection, id: &str) -> ApiResult<Value> {
+    let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
+    if inv["status"] == "concept" {
+        return Err(ApiError::bad("Een concept pas je gewoon aan; crediteren kan alleen bij een definitieve factuur"));
+    }
+    if !inv["credit_of"].as_str().unwrap_or("").is_empty() {
+        return Err(ApiError::bad("Dit is zelf al een creditfactuur"));
+    }
+    let number = inv["number"].as_str().unwrap_or("");
+    let lines: Vec<Value> = inv["lines"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|l| {
+            serde_json::json!({
+                "description": l["description"],
+                "quantity_milli": -l["quantity_milli"].as_i64().unwrap_or(1000),
+                "unit_cents": l["unit_cents"],
+                "vat_rate": l["vat_rate"],
+            })
+        })
+        .collect();
+    let body = serde_json::json!({
+        "client_id": inv["client_id"],
+        "date": db::today().to_string(),
+        "due_date": "",
+        "status": "concept",
+        "vat_scheme": inv["vat_scheme"],
+        "note": format!("Creditering van factuur {number}"),
+        "lines": lines,
+    });
+    let created = entities::create(conn, &INVOICES, &body)?;
+    let new_id = created["id"].as_str().unwrap_or_default().to_string();
+    conn.execute("UPDATE invoices SET credit_of = ?1 WHERE id = ?2", [id, &new_id])?;
+    entities::get(conn, &INVOICES, &new_id)?.ok_or_else(ApiError::not_found)
+}
+
 pub fn finalize(conn: &mut Connection, id: &str) -> ApiResult<Value> {
     let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
     if inv["status"] != "concept" {
@@ -210,5 +251,11 @@ mod tests {
         assert!(check_update(&c, "a", &json!({"date": "2026-01-01"})).is_err());
         assert!(check_delete(&c, "a").is_err());
         assert_eq!(set_paid(&mut c, "a", Some("2026-10-10")).unwrap()["status"], json!("betaald"));
+        let cr = credit(&mut c, "a").unwrap();
+        assert_eq!(cr["credit_of"], json!("a"));
+        assert_eq!(cr["status"], json!("concept"));
+        let original = entities::get(&c, &INVOICES, "a").unwrap().unwrap();
+        assert_eq!(totals_of(&cr).incl_cents, -totals_of(&original).incl_cents, "a credit cancels the invoice exactly");
+        assert!(credit(&mut c, cr["id"].as_str().unwrap()).is_err(), "a concept cannot be credited");
     }
 }

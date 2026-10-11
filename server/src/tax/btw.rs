@@ -201,6 +201,21 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
         warnings.push(if unconfirmed == 1 { "1 kostenpost in dit kwartaal is nog niet bevestigd en telt niet mee".to_string() } else { format!("{unconfirmed} kostenposten in dit kwartaal zijn nog niet bevestigd en tellen niet mee") });
     }
 
+    // Business payments from the bank in this quarter with no bon or invoice
+    // linked: their btw is missing from 5b until one is found.
+    let unlinked: i64 = conn.query_row(
+        "SELECT count(*) FROM bank_transactions WHERE amount_cents < 0 AND matched_id = '' AND ignored = 0 AND date BETWEEN ?1 AND ?2",
+        [&from_s, &to_s],
+        |row| row.get(0),
+    )?;
+    if unlinked > 0 {
+        warnings.push(if unlinked == 1 {
+            "1 betaling van de bank in dit kwartaal heeft nog geen bon; zonder bon telt de btw niet mee".to_string()
+        } else {
+            format!("{unlinked} betalingen van de bank in dit kwartaal hebben nog geen bon; zonder bon telt de btw niet mee")
+        });
+    }
+
     let rub = |code: &'static str, label: &'static str, has_base: bool| {
         let (base, vat) = r.get(code).copied().unwrap_or_default();
         let sources = sources.get(code).cloned().unwrap_or_default();
