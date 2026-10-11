@@ -14,7 +14,8 @@ DEST="${BOEK_BACKUP_DIR:?BOEK_BACKUP_DIR not set}"
 DB="$DATA/boekhouding.db"
 DAY=$(date +%F)
 
-mkdir -p "$DEST/db" "$DEST/files"
+# The attachments folder only appears with the first upload.
+mkdir -p "$DEST/db" "$DEST/files" "$DATA/files"
 SNAP="$DEST/db/boekhouding-$DAY.db"
 rm -f "$SNAP"
 sqlite3 "$DB" "VACUUM INTO '$SNAP'"
