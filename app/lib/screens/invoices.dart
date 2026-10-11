@@ -165,7 +165,7 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
         ...inv,
         'note': _note.text.trim(),
         'lines': _lines.map((l) => l.toJson()).toList(),
-      }..removeWhere((k, _) => ['number', 'sent_at', 'paid_at', 'updated_at'].contains(k));
+      }..removeWhere((k, _) => ['number', 'sent_at', 'paid_at', 'updated_at', 'reminded_at', 'reminders'].contains(k));
 
   Future<bool> _store() async {
     final saved = await guard(context, () => Api.instance.save('invoices', _concept ? _body : {'id': inv['id'], 'note': _note.text.trim(), 'created_at': inv['created_at']}));
@@ -222,6 +222,22 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
     if (res != null && mounted) showInfo(context, 'Verstuurd');
   }
 
+  Future<void> _remind() async {
+    final client = _clients.firstWhere((c) => c['id'] == inv['client_id'], orElse: () => {});
+    final ok = await confirm(context, 'Een vriendelijke herinnering voor factuur ${inv['number']} sturen naar ${client['email'] ?? '?'}? De factuur gaat opnieuw mee.', ok: 'Herinnering sturen');
+    if (!ok || !mounted) return;
+    final res = await guard(context, () => Api.instance.post('/api/invoices/${inv['id']}/remind'));
+    if (res != null && mounted) {
+      setState(() {
+        inv['reminders'] = ((inv['reminders'] as int?) ?? 0) + 1;
+        inv['reminded_at'] = DateTime.now().toIso8601String();
+      });
+      showInfo(context, 'Herinnering verstuurd');
+    }
+  }
+
+  bool get _overdue => inv['status'] == 'verzonden' && ((inv['due_date'] as String?) ?? '').compareTo(today()) < 0;
+
   Future<void> _paid(bool paid) async {
     String? date;
     if (paid) {
@@ -266,8 +282,11 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
               Notice(
                 inv['status'] == 'betaald'
                     ? 'Betaald op ${longDate(inv['paid_at'] as String?)}.'
-                    : 'Verstuurd${inv['sent_at'] != null ? ' per mail' : ''}; te betalen vóór ${longDate(inv['due_date'] as String?)}.',
-                color: inv['status'] == 'betaald' ? green : null,
+                    : _overdue
+                        ? 'Over de vervaldatum (${longDate(inv['due_date'] as String?)}).'
+                            '${(inv['reminders'] as int? ?? 0) > 0 ? ' ${inv['reminders']}× herinnerd, laatst op ${shortDate((inv['reminded_at'] as String).substring(0, 10))}.' : ''}'
+                        : 'Verstuurd${inv['sent_at'] != null ? ' per mail' : ''}; te betalen vóór ${longDate(inv['due_date'] as String?)}.',
+                color: inv['status'] == 'betaald' ? green : (_overdue ? red : null),
                 icon: inv['status'] == 'betaald' ? Icons.check_circle_outline : Icons.schedule,
               ),
             Row(children: [
@@ -336,7 +355,12 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
               ])
             else
               Wrap(spacing: 12, runSpacing: 12, children: [
-                FilledButton.icon(onPressed: _busy ? null : () => _act(_send), icon: const Icon(Icons.send_outlined), label: Text(inv['sent_at'] != null ? 'Opnieuw mailen' : 'Mailen naar klant')),
+                if (_overdue)
+                  FilledButton.icon(onPressed: _busy ? null : () => _act(_remind), icon: const Icon(Icons.notifications_active_outlined), label: const Text('Herinnering sturen')),
+                if (_overdue)
+                  OutlinedButton.icon(onPressed: _busy ? null : () => _act(_send), icon: const Icon(Icons.send_outlined), label: const Text('Opnieuw mailen'))
+                else
+                  FilledButton.icon(onPressed: _busy ? null : () => _act(_send), icon: const Icon(Icons.send_outlined), label: Text(inv['sent_at'] != null ? 'Opnieuw mailen' : 'Mailen naar klant')),
                 if (inv['status'] != 'betaald')
                   OutlinedButton.icon(onPressed: () => _paid(true), icon: const Icon(Icons.check), label: const Text('Betaald'))
                 else

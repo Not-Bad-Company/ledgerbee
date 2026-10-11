@@ -46,6 +46,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/invoices/:id/paid", post(paid))
         .route("/api/invoices/:id/pdf", get(invoice_pdf))
         .route("/api/invoices/:id/send", post(send_invoice))
+        .route("/api/invoices/:id/remind", post(remind_invoice))
         .route("/api/bank/import", post(bank_import))
         .route("/api/bank/suggestions", get(bank_suggestions))
         .route("/api/bank/missing", get(bank_missing))
@@ -282,11 +283,24 @@ async fn invoice_pdf(State(s): State<AppState>, _d: Device, Path(id): Path<Strin
 
 /// E-mails a final invoice to the client, with a copy to the owner.
 async fn send_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    mail_invoice(s, id, false).await
+}
+
+/// A friendly payment reminder for an invoice past its due date, the PDF
+/// attached again.
+async fn remind_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    mail_invoice(s, id, true).await
+}
+
+async fn mail_invoice(s: AppState, id: String, reminder: bool) -> ApiResult<Json<Value>> {
     let iid = id.clone();
     let (inv, client, company, owner) =
         with_db(&s, move |c| invoice_with_client(c, &iid).map(|(i, cl)| (i, cl, config::company(c), config::owner_email(c)))).await?;
     if inv["status"] == "concept" {
         return Err(ApiError::bad("Maak de factuur eerst definitief"));
+    }
+    if reminder && inv["status"] == "betaald" {
+        return Err(ApiError::bad("Deze factuur is al betaald"));
     }
     let to = client["email"].as_str().unwrap_or("").to_string();
     if to.is_empty() {
@@ -298,26 +312,37 @@ async fn send_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<Stri
     let bytes = pdf::render(&company, &inv, &client)?;
     let total = invoices::totals_of(&inv).incl_cents;
     let number = inv["number"].as_str().unwrap_or("").to_string();
-    let html = format!(
-        "<p>Beste {},</p><p>Hierbij ontvang je factuur {} van {} voor een bedrag van {}, te betalen vóór {}.</p><p>Met vriendelijke groet,<br>{}<br>{}</p>",
-        crate::mail::escape(client["contact"].as_str().filter(|c| !c.is_empty()).or(client["name"].as_str()).unwrap_or("")),
-        crate::mail::escape(&number),
-        crate::mail::escape(&company.name),
-        pdf::eur(total),
-        pdf::nl_date(inv["due_date"].as_str().unwrap_or("")),
-        crate::mail::escape(&company.owner),
-        crate::mail::escape(&company.name),
-    );
-    crate::mail::send(
-        &[&to, &owner],
-        &format!("Factuur {} van {}", number, company.name),
-        &html,
-        Some(crate::mail::Attachment { name: invoice_file_name(&inv), bytes }),
-    )
-    .await?;
+    let greeting = crate::mail::escape(client["contact"].as_str().filter(|c| !c.is_empty()).or(client["name"].as_str()).unwrap_or(""));
+    let due = pdf::nl_date(inv["due_date"].as_str().unwrap_or(""));
+    let pay_to = if company.iban.is_empty() { String::new() } else { format!(" naar {}", crate::mail::escape(&company.iban)) };
+    let body = if reminder {
+        format!(
+            "<p>Beste {greeting},</p><p>Volgens mijn administratie staat factuur {} van {} nog open: {}, met als vervaldatum {due}. \
+             Wil je het bedrag{pay_to} overmaken onder vermelding van {}? Is het al betaald, dan kun je dit bericht als niet verzonden beschouwen.</p>\
+             <p>De factuur zit er nog een keer bij.</p>",
+            crate::mail::escape(&number),
+            crate::mail::escape(&company.name),
+            pdf::eur(total),
+            crate::mail::escape(&number),
+        )
+    } else {
+        format!(
+            "<p>Beste {greeting},</p><p>Hierbij ontvang je factuur {} van {} voor een bedrag van {}, te betalen vóór {due}.</p>",
+            crate::mail::escape(&number),
+            crate::mail::escape(&company.name),
+            pdf::eur(total),
+        )
+    };
+    let html = format!("{body}<p>Met vriendelijke groet,<br>{}<br>{}</p>", crate::mail::escape(&company.owner), crate::mail::escape(&company.name));
+    let subject = if reminder { format!("Herinnering: factuur {} van {}", number, company.name) } else { format!("Factuur {} van {}", number, company.name) };
+    crate::mail::send(&[&to, &owner], &subject, &html, Some(crate::mail::Attachment { name: invoice_file_name(&inv), bytes })).await?;
     with_db(&s, move |c| {
-        c.execute("UPDATE invoices SET sent_at = ?1, updated_at = ?1 WHERE id = ?2", [db::now(), id.clone()])?;
-        entities::audit(c, "invoices", &id, "sent", None, Some(&json!({"to": to})))?;
+        if reminder {
+            c.execute("UPDATE invoices SET reminded_at = ?1, reminders = reminders + 1, updated_at = ?1 WHERE id = ?2", [db::now(), id.clone()])?;
+        } else {
+            c.execute("UPDATE invoices SET sent_at = ?1, updated_at = ?1 WHERE id = ?2", [db::now(), id.clone()])?;
+        }
+        entities::audit(c, "invoices", &id, if reminder { "reminded" } else { "sent" }, None, Some(&json!({"to": to})))?;
         Ok(())
     })
     .await?;

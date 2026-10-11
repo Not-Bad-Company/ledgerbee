@@ -1,4 +1,4 @@
-# Roadmap
+# Goudgulden roadmap
 
 What it takes to be a free, self-hosted alternative to Moneybird, e-Boekhouden
 and Jortt for one eenmanszaak. Ordered by what matters most; sources in
@@ -8,13 +8,12 @@ and Jortt for one eenmanszaak. Ordered by what matters most; sources in
 
 - [x] Share PDFs and photos to the app from any other app
 - [x] Company details editable in the app instead of the server's `.env`
-- [ ] **Btw check before filing:** tap a rubriek to see the invoices and
+- [x] **Btw check before filing:** tap a rubriek to see the invoices and
       costs behind it
-- [ ] **First run:** ask for the company details, start date and IBAN before
-      anything else
+- [x] **First run:** ask for the company details and IBAN before anything else
 - [ ] **Quarter checklist:** what's still missing for this quarter (unconfirmed
       costs, payments without a bon, concept invoices), in one place
-- [ ] **Invoices people pay faster:** payment reference, an EPC QR code
+- [x] **Invoices people pay faster:** payment reference, an EPC QR code
       ("scan to pay") on the PDF, and a reminder e-mail for overdue invoices
 
 ## Next

@@ -181,6 +181,10 @@ CREATE INDEX invoices_date ON invoices(date);
 CREATE INDEX bank_date ON bank_transactions(date);
 CREATE INDEX hours_date ON hours(date);
 CREATE INDEX trips_date ON trips(date);
+"#, r#"
+-- Payment reminders for overdue invoices.
+ALTER TABLE invoices ADD COLUMN reminded_at TEXT;
+ALTER TABLE invoices ADD COLUMN reminders INTEGER NOT NULL DEFAULT 0;
 "#];
 
 /// Categories every administration starts with. `ib_group` is the cost group
