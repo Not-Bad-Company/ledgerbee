@@ -1,10 +1,3 @@
-//! Deadlines, the to-do list, and the daily reminder e-mail.
-//!
-//! The deadlines are fixed by law, so the app schedules its own phone
-//! notifications from `deadlines()`; the server's e-mail is the second
-//! channel, and the only one that knows about overdue invoices and receipts
-//! still missing when the phone has not synced.
-
 use crate::db;
 use crate::error::ApiResult;
 use crate::tax::btw::{quarter_bounds, quarter_of};
@@ -26,7 +19,6 @@ fn filed(conn: &Connection, kind: &str, key: &str) -> bool {
     conn.query_row("SELECT status = 'ingediend' FROM periods WHERE kind = ?1 AND key = ?2", [kind, key], |r| r.get(0)).unwrap_or(false)
 }
 
-/// The business's start: the setting, else the day the account was made.
 pub fn start_date(conn: &Connection) -> NaiveDate {
     let parse = |s: String| NaiveDate::parse_from_str(s.get(..10).unwrap_or(&s), "%Y-%m-%d").ok();
     db::setting(conn, "start_date")
@@ -35,8 +27,6 @@ pub fn start_date(conn: &Connection) -> NaiveDate {
         .unwrap_or_else(db::today)
 }
 
-/// Every btw quarter since the start whose deadline is less than a year away
-/// or not yet filed, and the IB years likewise.
 pub fn deadlines(conn: &Connection, today: NaiveDate) -> ApiResult<Vec<Deadline>> {
     let start = start_date(conn);
     let horizon = today + chrono::Duration::days(366);
@@ -107,7 +97,6 @@ pub fn todo(conn: &Connection, today: NaiveDate) -> ApiResult<Todo> {
     })
 }
 
-/// What today's e-mail says, or `None` when there is nothing to say.
 pub fn digest(conn: &Connection, today: NaiveDate) -> ApiResult<Option<(String, String)>> {
     let mut items: Vec<String> = vec![];
     let mut subject = None;
@@ -130,7 +119,6 @@ pub fn digest(conn: &Connection, today: NaiveDate) -> ApiResult<Option<(String, 
     let t = todo(conn, today)?;
     for inv in &t.overdue_invoices {
         let due = inv["due_date"].as_str().unwrap_or("");
-        // Once on the day after the due date, then weekly.
         let days = NaiveDate::parse_from_str(due, "%Y-%m-%d").map(|d| (today - d).num_days()).unwrap_or(0);
         if days == 1 || days % 7 == 0 {
             items.push(format!(
@@ -160,7 +148,6 @@ pub fn digest(conn: &Connection, today: NaiveDate) -> ApiResult<Option<(String, 
     Ok(Some((subject, html)))
 }
 
-/// Runs forever: once a day after 08:00 Amsterdam time, sends the digest.
 pub async fn run(pool: db::Pool) {
     loop {
         let now = chrono::Utc::now().with_timezone(&chrono_tz::Europe::Amsterdam);

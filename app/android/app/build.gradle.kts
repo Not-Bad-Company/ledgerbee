@@ -2,12 +2,9 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Release signing key: android/key.properties (not in git) pointing at a
-// keystore outside the repo. Without it, release builds use the debug key.
 val keyProps = Properties().apply {
     val f = rootProject.file("key.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -21,15 +18,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        // flutter_local_notifications uses java.time on older Androids.
         isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
         applicationId = "com.notbadcompany.boekhouding"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        // ML Kit text recognition needs 21+, the notifications plugin's desugaring is fine there.
         minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

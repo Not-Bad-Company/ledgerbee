@@ -1,7 +1,3 @@
-//! One account: e-mail, password (argon2) and TOTP. A login hands the device
-//! a random token; only its SHA-256 is stored, and each device can be
-//! signed out from the others.
-
 use crate::api::AppState;
 use crate::db;
 use crate::error::{ApiError, ApiResult};
@@ -24,8 +20,6 @@ fn hash_token(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
-/// Creates the account, or replaces it (a new password and a new TOTP
-/// secret, and every device signed out).
 pub fn create_user(conn: &Connection, email: &str, password: &str) -> anyhow::Result<Enrolment> {
     if password.len() < 12 {
         anyhow::bail!("password must be at least 12 characters");
@@ -47,9 +41,6 @@ pub fn create_user(conn: &Connection, email: &str, password: &str) -> anyhow::Re
     Ok(Enrolment { qr_rows: totp::qr_rows(&uri), otpauth_uri: uri, recovery_codes: codes })
 }
 
-/// Checks e-mail, password and code (or a recovery code), and returns a new
-/// device token. Ten failures in fifteen minutes close the door for the rest
-/// of that window.
 pub fn login(conn: &Connection, email: &str, password: &str, code: &str, device: &str) -> ApiResult<String> {
     let since = (chrono::Utc::now() - chrono::Duration::minutes(15)).format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let failures: i64 = conn.query_row("SELECT count(*) FROM login_attempts WHERE ok = 0 AND at >= ?1", [&since], |r| r.get(0))?;
@@ -98,7 +89,6 @@ pub fn login(conn: &Connection, email: &str, password: &str, code: &str, device:
     Ok(token)
 }
 
-/// The signed-in device, from `Authorization: Bearer <token>`.
 pub struct Device {
     pub id: String,
 }

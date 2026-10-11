@@ -1,11 +1,3 @@
-//! Reads a receipt or invoice from its text: date, total, btw per rate,
-//! supplier, KvK and btw-id.
-//!
-//! The text comes from the phone's OCR (ML Kit) or from a PDF's text layer
-//! (`pdftotext`). No model, only rules: what a Dutch kassabon or factuur
-//! prints is regular enough, and the user confirms every draft anyway. What
-//! the parser had to guess is said in `notes`, so the form can point at it.
-
 use chrono::{Datelike, NaiveDate};
 use regex::Regex;
 use rusqlite::Connection;
@@ -36,7 +28,6 @@ fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
     cell.get_or_init(|| Regex::new(pattern).expect("valid regex"))
 }
 
-/// Every amount in a line, in cents: `1.234,56`, `12,34`, `12.34`, `€ 5,-`.
 pub fn amounts(line: &str) -> Vec<i64> {
     static R: OnceLock<Regex> = OnceLock::new();
     let r = re(&R, r"(-?)(\d{1,3}(?:[.\s]\d{3})+|\d+)\s?([.,])\s?(\d{2}|-)(?:\b|$|\s)");
@@ -45,7 +36,6 @@ pub fn amounts(line: &str) -> Vec<i64> {
         let int: String = c[2].chars().filter(char::is_ascii_digit).collect();
         let Ok(int) = int.parse::<i64>() else { continue };
         let frac = if &c[4] == "-" { 0 } else { c[4].parse::<i64>().unwrap_or(0) };
-        // A thousands group written with the decimal sign ("1,234") is not an amount.
         let v = int * 100 + frac;
         out.push(if &c[1] == "-" { -v } else { v });
     }
@@ -68,7 +58,6 @@ fn fix_year(y: i32) -> i32 {
     }
 }
 
-/// Every date in the text, in reading order.
 pub fn dates(text: &str) -> Vec<NaiveDate> {
     static NUM: OnceLock<Regex> = OnceLock::new();
     static ISO: OnceLock<Regex> = OnceLock::new();
@@ -104,9 +93,6 @@ fn lower(s: &str) -> String {
     s.to_lowercase()
 }
 
-/// The total: an amount on a `totaal` / `te betalen` line beats one on a
-/// `pin` / `betaald` line; the largest wins. Without either, the largest
-/// amount in the text.
 fn total(lines: &[&str]) -> (Option<i64>, bool) {
     static STRONG: OnceLock<Regex> = OnceLock::new();
     static WEAK: OnceLock<Regex> = OnceLock::new();
@@ -139,7 +125,6 @@ fn total(lines: &[&str]) -> (Option<i64>, bool) {
     (lines.iter().flat_map(|l| amounts(l)).filter(|v| *v > 0).max(), false)
 }
 
-/// Btw per rate from lines that name the rate (`21%`, `9%`, `hoog`, `laag`).
 fn vat_lines(lines: &[&str]) -> Vec<DraftLine> {
     static RATE: OnceLock<Regex> = OnceLock::new();
     let rate_re = re(&RATE, r"(?i)(?:\b(21|9|19|20|0)[,.]?0*\s?%|\b(hoog|laag)\b)");
@@ -158,7 +143,6 @@ fn vat_lines(lines: &[&str]) -> Vec<DraftLine> {
         if rate != 21 && rate != 9 {
             continue;
         }
-        // The rate itself is not an amount.
         let rest = rate_re.replace_all(line, " ");
         let mut nums = amounts(&rest);
         if nums.is_empty() {
@@ -173,7 +157,6 @@ fn vat_lines(lines: &[&str]) -> Vec<DraftLine> {
                     pick = Some((b, v));
                     break 'outer;
                 }
-                // An incl amount next to the btw: base = incl − btw.
                 if b > v && fits(b - v, v) {
                     pick = Some((b - v, v));
                     break 'outer;
@@ -181,7 +164,6 @@ fn vat_lines(lines: &[&str]) -> Vec<DraftLine> {
             }
         }
         if pick.is_none() && nums.len() == 1 {
-            // Only the btw amount: work the base back.
             let v = nums[0];
             pick = Some(((v as i128 * 100 / rate as i128) as i64, v));
         }
@@ -226,8 +208,6 @@ fn first_name_line(lines: &[&str]) -> String {
         .collect()
 }
 
-/// Parses `text`. `today` bounds the date (no future dates, none older than
-/// two years); `conn`, when given, matches the supplier against those known.
 pub fn parse(text: &str, today: NaiveDate, conn: Option<&Connection>) -> Draft {
     let lines: Vec<&str> = text.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
     let mut d = Draft::default();
@@ -271,14 +251,12 @@ pub fn parse(text: &str, today: NaiveDate, conn: Option<&Connection>) -> Draft {
         let sum: i64 = d.lines.iter().map(|x| x.amount_excl_cents + x.vat_cents).sum();
         if (sum - total).abs() > 2 {
             if sum < total {
-                // The rest has no btw on it (statiegeld, a 0% item) or was missed.
                 d.lines.push(DraftLine { vat_rate: "0".into(), amount_excl_cents: total - sum, vat_cents: 0 });
             }
             d.notes.push("Btw-regels tellen niet op tot het totaal; controleer de bedragen".into());
         }
     }
 
-    // Supplier.
     if let Some(conn) = conn {
         if let Some((id, name, cat, rate)) = match_supplier(conn, &l, &d.kvk, &d.vat_id) {
             d.supplier_id = Some(id);
@@ -295,7 +273,6 @@ pub fn parse(text: &str, today: NaiveDate, conn: Option<&Connection>) -> Draft {
     d
 }
 
-/// A known supplier whose KvK, btw-id or one of its match terms appears.
 fn match_supplier(conn: &Connection, text: &str, kvk: &str, vat: &str) -> Option<(String, String, Option<String>, String)> {
     let mut stmt = conn.prepare("SELECT id, name, kvk, vat_id, match_terms, default_category_id, default_vat_rate FROM suppliers").ok()?;
     let rows = stmt
@@ -325,8 +302,6 @@ fn match_supplier(conn: &Connection, text: &str, kvk: &str, vat: &str) -> Option
     best.map(|(_, b)| b)
 }
 
-/// After the user confirms a document: remember the supplier, its first
-/// category and a match term, so the next receipt from it fills itself in.
 pub fn learn(conn: &Connection, doc: &serde_json::Value) -> rusqlite::Result<Option<String>> {
     let name = doc["supplier_name"].as_str().unwrap_or("").trim().to_string();
     if name.is_empty() {

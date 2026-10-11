@@ -1,18 +1,6 @@
-//! Settings from the environment.
-//!
-//! Secrets and paths come from `server/.env` (or the systemd unit's
-//! `EnvironmentFile`). The company's details (name, KvK, btw-id, address)
-//! are entered in the app and stored in the database; `BOEK_COMPANY_*`
-//! variables, or `NBC_*` ones in a shared `.env` further up the tree (how
-//! Not Bad Company keeps one copy for all its projects), fill in whatever
-//! the app has not set.
-
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-/// Loads `./.env`, then an optional shared company file: `NBC_ENV_FILE`, or the first
-/// `.env` that sets `NBC_NAME` walking up from the working directory. Values
-/// already in the environment win.
 pub fn load() {
     load_file(Path::new(".env"));
     let file = std::env::var("NBC_ENV_FILE").ok().map(PathBuf::from).or_else(|| {
@@ -31,10 +19,6 @@ pub fn load() {
     }
 }
 
-/// `KEY=value` lines the way systemd's `EnvironmentFile` reads them: spaces
-/// inside an unquoted value are kept (`NBC_NAME=Not Bad Company`), which
-/// dotenv parsers refuse. `#` lines are comments; one pair of surrounding
-/// quotes is removed. A variable already set is left alone.
 fn load_file(path: &Path) {
     let Ok(text) = std::fs::read_to_string(path) else { return };
     for (key, value) in parse_env(&text) {
@@ -87,8 +71,6 @@ pub fn bind() -> String {
     std::env::var("BOEK_BIND").unwrap_or_else(|_| "127.0.0.1:8090".into())
 }
 
-/// The master secret that seals the TOTP secret. 32+ characters in
-/// production; debug builds and tests fall back to a fixed development key.
 pub fn secret() -> Vec<u8> {
     static SECRET: OnceLock<Vec<u8>> = OnceLock::new();
     SECRET
@@ -104,8 +86,6 @@ fn var(key: &str) -> String {
     std::env::var(key).unwrap_or_default().trim().to_string()
 }
 
-/// A value of X's with no digit in it does not exist yet (the shared .env's
-/// placeholder convention).
 fn real(v: String) -> String {
     if v.to_ascii_uppercase().contains("XX") && !v.chars().any(|c| c.is_ascii_digit()) {
         String::new()
@@ -114,8 +94,6 @@ fn real(v: String) -> String {
     }
 }
 
-/// The company fields: struct field, settings key, and the environment
-/// variables that fill it when the setting is empty.
 pub const COMPANY_FIELDS: &[(&str, &[&str])] = &[
     ("name", &["BOEK_COMPANY_NAME", "NBC_NAME"]),
     ("owner", &["BOEK_COMPANY_OWNER", "NBC_FOUNDER"]),
@@ -166,7 +144,6 @@ pub fn company(conn: &rusqlite::Connection) -> Company {
     }
 }
 
-/// Where reminders go: BOEK_OWNER_EMAIL, else the company's address.
 pub fn owner_email(conn: &rusqlite::Connection) -> String {
     let own = var("BOEK_OWNER_EMAIL");
     if own.is_empty() {

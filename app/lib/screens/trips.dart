@@ -1,6 +1,3 @@
-// Business kilometres with an own car: € 0,23 per km off the winst. The
-// Belastingdienst wants a rittenregistratie: date, from, to, purpose, km.
-
 import 'package:flutter/material.dart';
 
 import '../api.dart';

@@ -1,6 +1,3 @@
-// Costs: every bonnetje and incoming invoice, scanning, and the editor that
-// turns a draft into a confirmed cost.
-
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -14,7 +11,6 @@ import '../scan.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
-/// Categories change rarely: loaded once per session.
 class Categories {
   static List<Map<String, dynamic>>? _all;
   static Future<List<Map<String, dynamic>>> all({bool refresh = false}) async {
@@ -110,7 +106,6 @@ class _CostsScreenState extends State<CostsScreen> {
   }
 }
 
-/// Camera (phone), a file (PDF, photo, screenshot), or by hand.
 class ScanButton extends StatelessWidget {
   final VoidCallback? onDone;
   const ScanButton({super.key, this.onDone});
@@ -166,8 +161,6 @@ class ScanButton extends StatelessWidget {
   }
 }
 
-/// Turns a photo, file or nothing (manual entry) into a draft and opens it.
-/// Also used for files shared to the app from another one.
 Future<void> openCapture(BuildContext context, Capture? cap, {VoidCallback? onDone}) async {
   Map<String, dynamic> doc = {'kind': cap?.isPdf == true ? 'factuur' : 'bonnetje', 'date': today(), 'status': 'concept', 'lines': []};
   Uint8List? file = cap?.bytes;
@@ -175,7 +168,6 @@ Future<void> openCapture(BuildContext context, Capture? cap, {VoidCallback? onDo
   if (cap != null) {
     try {
       if (cap.isPdf) {
-        // The server reads the PDF's text layer and keeps the file.
         final up = await Api.instance.upload(cap.bytes);
         file = null;
         doc['file_sha'] = up['sha'];
@@ -192,7 +184,6 @@ Future<void> openCapture(BuildContext context, Capture? cap, {VoidCallback? onDo
         if (context.mounted) showError(context, e);
         return;
       }
-      // Offline: keep the photo and its text; the server fills it in later.
       await Api.instance.createDocument({...doc, 'ocr_text': cap.ocrText}, cap.bytes);
       if (context.mounted) showInfo(context, 'Bewaard. Hij wordt verstuurd en ingevuld zodra er verbinding is.');
       onDone?.call();
@@ -290,7 +281,6 @@ class _DocumentEditorState extends State<DocumentEditor> {
 
   int get _linesTotal => _lines.fold(0, (s, l) => s + l.exclCents + l.vatCents);
 
-  /// One line taking the whole total at its rate.
   void _spread() {
     final total = parseEur(_total.text) ?? 0;
     final l = _lines.first;

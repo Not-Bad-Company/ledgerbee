@@ -1,12 +1,9 @@
-// Small building blocks every screen shares.
-
 import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'format.dart';
 import 'theme.dart';
 
-/// Loads something, shows it, and offers pull-to-refresh and a retry.
 class Loaded<T> extends StatefulWidget {
   final Future<T> Function() load;
   final Widget Function(BuildContext context, T data, Future<void> Function() reload) builder;
@@ -89,7 +86,6 @@ Future<bool> confirm(BuildContext context, String text, {String ok = 'Ja'}) asyn
   return r ?? false;
 }
 
-/// Runs an action with a spinner-less guard and reports its error.
 Future<T?> guard<T>(BuildContext context, Future<T> Function() f) async {
   try {
     return await f();
@@ -239,7 +235,6 @@ class MoneyField extends StatelessWidget {
   }
 }
 
-/// The offline banner, with the number of scans waiting to be sent.
 class ConnectionBanner extends StatelessWidget {
   const ConnectionBanner({super.key});
 
@@ -270,7 +265,6 @@ class ConnectionBanner extends StatelessWidget {
   }
 }
 
-/// Wraps a screen's body to a readable width on the desktop.
 class Readable extends StatelessWidget {
   final Widget child;
   final double max;
@@ -281,8 +275,6 @@ class Readable extends StatelessWidget {
       Align(alignment: Alignment.topCenter, child: ConstrainedBox(constraints: BoxConstraints(maxWidth: max), child: child));
 }
 
-/// The app's mark: the guilder sign, ƒ, in amber on black. Goudgulden is
-/// named after the Dutch gold guilder. Same drawing as the launcher icon.
 class AppMark extends StatelessWidget {
   final double size;
   const AppMark({super.key, this.size = 40});

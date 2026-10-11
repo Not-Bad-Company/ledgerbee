@@ -1,18 +1,13 @@
-// The same darks, lights and amber as notbadcompany.com, so the app reads as
-// one of its projects: near-black ground, hairline rules instead of shadows,
-// square corners, Schibsted Grotesk for headings and big figures, Public Sans
-// for text (tabular figures for amounts), JetBrains Mono for labels.
-
 import 'package:flutter/material.dart';
 
-const night = Color(0xFF07080B); // --bg
-const surface = Color(0xFF0C0E12); // --surface
-const raised = Color(0xFF12151B); // sheets, dialogs, inputs
-const rule = Color(0x299AA3B2); // --rule, rgba(154,163,178,.16)
-const fg = Color(0xFFE4E8EE); // --fg
-const muted = Color(0xFF9AA3B2); // --fg-muted
-const faint = Color(0xFF748090); // --fg-faint
-const accent = Color(0xFFD9A441); // --accent
+const night = Color(0xFF07080B);
+const surface = Color(0xFF0C0E12);
+const raised = Color(0xFF12151B);
+const rule = Color(0x299AA3B2);
+const fg = Color(0xFFE4E8EE);
+const muted = Color(0xFF9AA3B2);
+const faint = Color(0xFF748090);
+const accent = Color(0xFFD9A441);
 
 const green = Color(0xFF86C9A4);
 const red = Color(0xFFEF8F7F);
@@ -27,7 +22,6 @@ const tabular = [FontFeature.tabularFigures()];
 const _square = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(2)));
 const _ruled = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(2)), side: BorderSide(color: rule));
 
-/// Small labels, the way the website sets them: mono, muted.
 TextStyle labelStyle({Color color = muted, double size = 12}) => TextStyle(fontFamily: mono, fontSize: size, color: color, letterSpacing: 0.2, height: 1.4);
 
 ThemeData buildTheme() {
@@ -74,7 +68,6 @@ ThemeData buildTheme() {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      // Explicit size: the raw theme's styles only get sizes once Theme.of localises them.
       titleTextStyle: TextStyle(fontFamily: display, fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: fg),
       shape: Border(bottom: BorderSide(color: rule)),
     ),
@@ -170,10 +163,8 @@ ThemeData buildTheme() {
   );
 }
 
-/// Amounts: Public Sans with tabular figures so columns line up.
 TextStyle amountStyle(BuildContext context, {double? size, FontWeight weight = FontWeight.w600, Color? color}) =>
     TextStyle(fontFamily: sans, fontFeatures: tabular, fontSize: size, fontWeight: weight, color: color ?? fg);
 
-/// Big figures (the next deadline, a total): Schibsted Grotesk.
 TextStyle figureStyle({double size = 48, Color color = fg}) =>
     TextStyle(fontFamily: display, fontFeatures: tabular, fontSize: size, fontWeight: FontWeight.w700, letterSpacing: -size * 0.035, height: 1, color: color);

@@ -1,11 +1,3 @@
-//! Time-based one-time passwords (RFC 6238) for the one account.
-//!
-//! Copied from krentenweger-web's `totp.rs`. Codes are HMAC-SHA1, six digits,
-//! 30-second steps, one step either side of now; a used step is refused
-//! afterwards (`users.totp_last_step`). The secret is stored sealed with
-//! ChaCha20-Poly1305 under a key derived from `BOEK_SECRET`. Ten recovery
-//! codes, shown once, stored as SHA-256 hashes.
-
 use chacha20poly1305::aead::{Aead, KeyInit};
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use hmac::{Hmac, Mac};
@@ -13,12 +5,9 @@ use rand::RngCore;
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
-/// Seconds per code.
 pub const STEP: i64 = 30;
-/// Steps either side of now that still count, for a phone clock a little off.
 pub const WINDOW: i64 = 1;
 
-/// The six-digit code for one time step (RFC 4226 truncation).
 pub fn code_at(secret: &[u8], step: i64) -> u32 {
     let mut mac = <Hmac<Sha1> as Mac>::new_from_slice(secret).expect("hmac takes any key length");
     mac.update(&(step as u64).to_be_bytes());
@@ -28,8 +17,6 @@ pub fn code_at(secret: &[u8], step: i64) -> u32 {
     bin % 1_000_000
 }
 
-/// The time step a typed code matches within the window around `now_unix`.
-/// The caller refuses a step at or before the last one used.
 pub fn matching_step(secret: &[u8], code: &str, now_unix: i64) -> Option<i64> {
     let code: String = code.chars().filter(|c| !c.is_whitespace()).collect();
     if code.len() != 6 || !code.bytes().all(|b| b.is_ascii_digit()) {
@@ -42,7 +29,6 @@ pub fn matching_step(secret: &[u8], code: &str, now_unix: i64) -> Option<i64> {
 
 const B32: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
-/// RFC 4648 base32 without padding, as authenticator apps take a secret.
 pub fn base32(bytes: &[u8]) -> String {
     let mut out = String::new();
     let (mut buffer, mut bits) = (0u32, 0u32);
@@ -61,14 +47,12 @@ pub fn base32(bytes: &[u8]) -> String {
     out
 }
 
-/// A fresh 160-bit secret.
 pub fn new_secret() -> Vec<u8> {
     let mut s = vec![0u8; 20];
     rand::rngs::OsRng.fill_bytes(&mut s);
     s
 }
 
-/// The `otpauth://` link an authenticator app reads, from the QR or a tap.
 pub fn otpauth_uri(secret: &[u8], account: &str) -> String {
     format!(
         "otpauth://totp/Boekhouding:{}?secret={}&issuer=Boekhouding&algorithm=SHA1&digits=6&period=30",
@@ -77,8 +61,6 @@ pub fn otpauth_uri(secret: &[u8], account: &str) -> String {
     )
 }
 
-/// The QR code of `text` as rows of `1` (dark) and `0`, without the quiet
-/// zone; the app and the web page draw it.
 pub fn qr_rows(text: &str) -> Vec<String> {
     let Ok(code) = qrcode::QrCode::with_error_correction_level(text, qrcode::EcLevel::M) else {
         return Vec::new();
@@ -90,7 +72,6 @@ pub fn qr_rows(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Ten codes like `k7m2-x9qp`, from an alphabet without look-alikes.
 pub fn new_recovery_codes() -> Vec<String> {
     const ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
     let mut rng = rand::rngs::OsRng;
@@ -108,9 +89,6 @@ pub fn new_recovery_codes() -> Vec<String> {
         .collect()
 }
 
-/// What is stored for a recovery code: a SHA-256 of it after the clean-up a
-/// typed code gets (case, spaces and the dash do not matter). The codes are
-/// random and attempts are rate-limited, so a slow hash adds nothing.
 pub fn hash_recovery(code: &str) -> String {
     let clean: String = code.to_lowercase().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
     hex::encode(Sha256::digest(format!("boekhouding-recovery:{clean}")))
@@ -124,7 +102,6 @@ fn cipher() -> ChaCha20Poly1305 {
     ChaCha20Poly1305::new(Key::from_slice(&key))
 }
 
-/// The secret sealed for storage: `hex(nonce ‖ ciphertext+tag)`.
 pub fn seal(secret: &[u8]) -> String {
     let mut nonce = [0u8; 12];
     rand::rngs::OsRng.fill_bytes(&mut nonce);
@@ -134,7 +111,6 @@ pub fn seal(secret: &[u8]) -> String {
     hex::encode(out)
 }
 
-/// The secret, or `None` when it was sealed under another key or altered.
 pub fn open(stored: &str) -> Option<Vec<u8>> {
     let raw = hex::decode(stored).ok()?;
     if raw.len() <= 12 {
@@ -148,7 +124,6 @@ pub fn open(stored: &str) -> Option<Vec<u8>> {
 mod tests {
     use super::*;
 
-    /// RFC 6238 appendix B, the SHA-1 rows, last six digits.
     #[test]
     fn codes_match_rfc_6238() {
         let secret = b"12345678901234567890";
@@ -170,7 +145,6 @@ mod tests {
         assert!(uri.starts_with("otpauth://totp/Boekhouding:a%40b.nl?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&"));
         let rows = qr_rows(&uri);
         assert!(rows.len() >= 21 && rows.iter().all(|r| r.len() == rows.len()));
-        // A finder pattern in the top-left corner.
         assert!(rows[0].starts_with("1111111"));
     }
 

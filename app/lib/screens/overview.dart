@@ -1,5 +1,3 @@
-// The first screen: what is due, what is waiting, and how the year goes.
-
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -141,8 +139,6 @@ class OverviewScreen extends StatelessWidget {
   static String _summary(int tasks) => tasks == 0 ? 'Alles is bij. Niets dat op je wacht.' : tasks == 1 ? 'Eén ding wacht op je.' : '$tasks dingen wachten op je.';
 }
 
-/// The next deadline: a ruled panel, amber along the top once it is two
-/// weeks away, the days left as the one big figure on the screen.
 class _Envelope extends StatelessWidget {
   final Map deadline;
   final Map quarter;

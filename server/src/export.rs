@@ -1,7 +1,3 @@
-//! One year's administration as a zip: CSVs, the reports, every attachment
-//! and every invoice PDF. For an accountant, a Belastingdienst request, or
-//! just a copy outside the server.
-
 use crate::entities::{self, ListQuery, ASSETS, BANK, DOCUMENTS, HOURS, TRIPS};
 use crate::{config, files, invoices, pdf, tax};
 use anyhow::Result;

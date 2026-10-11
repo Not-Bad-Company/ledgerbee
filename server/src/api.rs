@@ -1,6 +1,3 @@
-//! The JSON API the app talks to. Everything but `/api/login` and
-//! `/api/health` needs a device token (`auth::Device`).
-
 use crate::auth::{self, Device};
 use crate::db::{self, Pool};
 use crate::entities::{self, ListQuery, BANK, DOCUMENTS, INVOICES};
@@ -21,7 +18,6 @@ pub struct AppState {
     pub pool: Pool,
 }
 
-/// Runs `f` with a connection on the blocking pool.
 async fn with_db<T: Send + 'static>(state: &AppState, f: impl FnOnce(&mut Connection) -> ApiResult<T> + Send + 'static) -> ApiResult<T> {
     let pool = state.pool.clone();
     tokio::task::spawn_blocking(move || {
@@ -114,8 +110,6 @@ async fn read(State(s): State<AppState>, _d: Device, Path((name, id)): Path<(Str
     with_db(&s, move |c| entities::get(c, e, &id)?.ok_or_else(ApiError::not_found)).await.map(Json)
 }
 
-/// A document arriving with OCR text and no lines (a phone scan, maybe made
-/// offline) is filled in from the text; what the user already typed wins.
 fn fill_from_text(c: &Connection, body: &mut Value) {
     let text = body["ocr_text"].as_str().unwrap_or("").to_string();
     let has_lines = body["lines"].as_array().map(|a| !a.is_empty()).unwrap_or(false);
@@ -210,7 +204,6 @@ async fn parse_text(State(s): State<AppState>, _d: Device, Json(b): Json<TextBod
     Ok(Json(json!(d)))
 }
 
-/// Stores a file. A PDF also comes back read: its text and a draft.
 async fn upload(State(s): State<AppState>, _d: Device, body: Bytes) -> ApiResult<Json<Value>> {
     let kind = files::sniff(&body);
     let bytes = body.to_vec();
@@ -286,13 +279,10 @@ async fn invoice_pdf(State(s): State<AppState>, _d: Device, Path(id): Path<Strin
     Ok(([(header::CONTENT_TYPE, "application/pdf".to_string()), (header::CONTENT_DISPOSITION, disposition)], bytes).into_response())
 }
 
-/// E-mails a final invoice to the client, with a copy to the owner.
 async fn send_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
     mail_invoice(s, id, false).await
 }
 
-/// A friendly payment reminder for an invoice past its due date, the PDF
-/// attached again.
 async fn remind_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
     mail_invoice(s, id, true).await
 }
@@ -406,7 +396,6 @@ async fn ib_report(State(s): State<AppState>, _d: Device, Path(year): Path<i32>)
     with_db(&s, move |c| Ok(json!(tax::ib::report(c, year)?))).await.map(Json)
 }
 
-/// Marks a period as filed, keeping a copy of the numbers as they were.
 async fn file_period(State(s): State<AppState>, _d: Device, Path((kind, key)): Path<(String, String)>) -> ApiResult<Json<Value>> {
     with_db(&s, move |c| {
         let snapshot = match kind.as_str() {
@@ -426,7 +415,6 @@ async fn file_period(State(s): State<AppState>, _d: Device, Path((kind, key)): P
     .map(Json)
 }
 
-/// Opens a filed period again, for a suppletie. Logged like every change.
 async fn reopen_period(State(s): State<AppState>, _d: Device, Path((kind, key)): Path<(String, String)>) -> ApiResult<Json<Value>> {
     with_db(&s, move |c| {
         c.execute("UPDATE periods SET status = 'open' WHERE kind = ?1 AND key = ?2", [&kind, &key])?;
@@ -474,7 +462,6 @@ async fn get_settings(State(s): State<AppState>, _d: Device) -> ApiResult<Json<V
         let mut out = serde_json::Map::new();
         out.insert("start_date".into(), json!(reminders::start_date(c).to_string()));
         out.insert("startersaftrek".into(), json!(db::setting(c, "startersaftrek").unwrap_or_else(|| "ja".into())));
-        // What the app has stored; `company` in /api/me is the result with the env filled in.
         for (field, _) in config::COMPANY_FIELDS {
             let key = format!("company_{field}");
             out.insert(key.clone(), json!(db::setting(c, &key).unwrap_or_default()));

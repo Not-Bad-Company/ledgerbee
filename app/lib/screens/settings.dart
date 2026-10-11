@@ -1,6 +1,3 @@
-// Company details (printed on invoices), the startersaftrek, categories,
-// devices, and signing out.
-
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -157,7 +154,6 @@ class SettingsScreen extends StatelessWidget {
     ('iban', 'IBAN', TextInputType.text),
   ];
 
-  /// The company form; also opened from the overview on first run.
   static Future<void> editCompany(BuildContext context, Map current) async {
     final ctl = {
       for (final (k, _, _) in _companyFields) k: TextEditingController(text: (current[k] as String?) ?? ''),

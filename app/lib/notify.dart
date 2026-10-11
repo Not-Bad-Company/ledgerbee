@@ -1,8 +1,3 @@
-// Deadline reminders on the device. The deadlines are fixed by law, so the
-// phone schedules them itself (14, 7 and 1 day before, and on the day, at
-// 09:00) and they arrive even without a network. Linux cannot schedule, so
-// the desktop shows what is near when the app opens, once a day.
-
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -34,7 +29,6 @@ class Notify {
       );
       _ready = true;
     } catch (_) {
-      // No notification daemon on this desktop: reminders still come by e-mail.
     }
   }
 

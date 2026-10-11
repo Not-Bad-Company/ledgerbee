@@ -4,7 +4,6 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-# Same user and paths as boekhouding.service; BOEK_BACKUP_DIR must be writable by it.
 User=boekhouding
 Group=boekhouding
 WorkingDirectory=/opt/boekhouding

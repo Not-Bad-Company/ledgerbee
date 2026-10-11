@@ -1,10 +1,3 @@
-//! Bank statements: CSV from the Dutch banks, or CAMT.053 XML, and matching
-//! the transactions to invoices and documents.
-//!
-//! CSV columns are found by their header names rather than by bank, so a bank
-//! that renames or reorders a column still imports. ABN AMRO's headerless
-//! TXT export is recognised by its shape.
-
 use crate::db;
 use crate::error::{ApiError, ApiResult};
 use chrono::NaiveDate;
@@ -32,7 +25,6 @@ fn parse_date(s: &str) -> Option<NaiveDate> {
     None
 }
 
-/// `-12,34`, `+1.234,56`, `12.34`, `−5,00` → cents.
 fn parse_amount(s: &str) -> Option<i64> {
     let s: String = s.trim().replace('−', "-").chars().filter(|c| !c.is_whitespace() && *c != '€').collect();
     let neg = s.starts_with('-');
@@ -62,7 +54,6 @@ pub fn parse_csv(data: &str) -> ApiResult<Vec<Tx>> {
     let Some(head) = rows.next() else { return Ok(vec![]) };
     let headers: Vec<String> = head.iter().map(|h| h.trim().to_lowercase()).collect();
 
-    // ABN AMRO TXT: no header; account, currency, date, start, end, valuedate, amount, description.
     if parse_date(&headers.get(2).cloned().unwrap_or_default()).is_some() && headers.len() >= 8 && delim == b'\t' {
         let mut out = vec![];
         for r in std::iter::once(head).chain(rows) {
@@ -110,11 +101,9 @@ pub fn parse_csv(data: &str) -> ApiResult<Vec<Tx>> {
     Ok(out)
 }
 
-/// CAMT.053: one `<Ntry>` per transaction.
 pub fn parse_camt(xml: &str) -> ApiResult<Vec<Tx>> {
     let entry = Regex::new(r"(?s)<Ntry>(.*?)</Ntry>").expect("regex");
     let tag = |block: &str, path: &str| -> String {
-        // The first <tag> whose name ends the path, inside the previous ones.
         let mut scope = block.to_string();
         for t in path.split('/') {
             let r = Regex::new(&format!(r"(?s)<{t}(?:\s[^>]*)?>(.*?)</{t}>")).expect("regex");
@@ -164,13 +153,10 @@ pub struct ImportResult {
     pub matched: usize,
 }
 
-/// Stores new transactions (a transaction seen before is skipped by its hash)
-/// and matches what can be matched without asking.
 pub fn import(conn: &mut Connection, txs: &[Tx]) -> ApiResult<ImportResult> {
     let mut res = ImportResult::default();
     let tx = conn.transaction()?;
     let now = db::now();
-    // Two identical rows on one day (two coffees) are both real: number them.
     let mut seen: std::collections::HashMap<String, usize> = Default::default();
     for t in txs {
         let base = format!("{}|{}|{}|{}|{}", t.date, t.amount_cents, t.iban, t.counterparty, t.description);
@@ -201,8 +187,6 @@ pub struct Suggestion {
     pub score: i64,
 }
 
-/// Incoming money that names an open invoice's number and has its exact total
-/// marks that invoice paid without asking. Everything else is a suggestion.
 pub fn auto_match(conn: &mut Connection) -> ApiResult<usize> {
     let open: Vec<(String, String, i64)> = open_invoices(conn)?;
     let incoming: Vec<(String, String, i64, String)> = {
@@ -246,9 +230,6 @@ pub fn link(conn: &Connection, transaction: &str, kind: &str, id: &str) -> ApiRe
     Ok(())
 }
 
-/// For each unmatched transaction, the best candidate: an open invoice with
-/// the same total, or a document with the same total within ten days, ranked
-/// up when the supplier's name or match terms appear in the bank line.
 pub fn suggestions(conn: &Connection) -> ApiResult<Vec<Suggestion>> {
     let open = open_invoices(conn)?;
     let docs: Vec<(String, String, i64, String, String, String)> = {
@@ -307,8 +288,6 @@ pub fn suggestions(conn: &Connection) -> ApiResult<Vec<Suggestion>> {
     Ok(out)
 }
 
-/// Money that left the business account more than 14 days ago with nothing
-/// to show for it: the "bonnetje ontbreekt" list.
 pub fn missing_receipts(conn: &Connection, today: NaiveDate) -> ApiResult<Vec<serde_json::Value>> {
     let cutoff = (today - chrono::Duration::days(14)).to_string();
     let rows = crate::entities::query_json(

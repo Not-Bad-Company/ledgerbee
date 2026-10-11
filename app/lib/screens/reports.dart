@@ -1,6 +1,3 @@
-// The aangiftes: the btw quarter in the form's own rubrieken, and the
-// year's figures for the inkomstenbelasting.
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -54,7 +51,6 @@ class _Btw extends StatefulWidget {
 
 class _BtwState extends State<_Btw> {
   late final quarters = _quarters();
-  // The quarter to file is usually the one that just ended.
   late String key = quarters.length > 1 && DateTime.now().month % 3 == 1 ? quarters[1] : quarters.first;
 
   @override
@@ -186,7 +182,6 @@ class _Rubriek extends StatelessWidget {
     );
   }
 
-  /// The invoices and costs behind a rubriek, each one a tap away.
   void _showSources(BuildContext context, List<Map> sources) {
     showModalBottomSheet<void>(
       context: context,
@@ -234,7 +229,6 @@ class _Ib extends StatefulWidget {
 }
 
 class _IbState extends State<_Ib> {
-  // Until 1 May the year to file is last year's.
   int year = DateTime.now().month < 5 && DateTime.now().year > 2026 ? DateTime.now().year - 1 : DateTime.now().year;
 
   static const groups = {

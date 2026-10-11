@@ -1,13 +1,3 @@
-//! Generic create/read/update/delete for the bookkeeping tables.
-//!
-//! Each table is described once (`Entity`): its writable fields and their
-//! kinds, the date that decides which period a row belongs to, and an
-//! optional child table of lines that travels inside the parent as `lines`.
-//! Every write is checked against filed periods and written to `audit_log`.
-//!
-//! Creates are idempotent on `id`: the app makes the id itself, so a create
-//! replayed from its offline outbox returns the row that already exists.
-
 use crate::db;
 use crate::error::{ApiError, ApiResult};
 use rusqlite::types::ValueRef;
@@ -17,7 +7,6 @@ use serde_json::{Map, Value};
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Kind {
     Text,
-    /// Text that may be null (foreign keys, optional dates).
     OptText,
     Int,
     Bool,
@@ -33,10 +22,7 @@ pub struct Entity {
     pub name: &'static str,
     pub table: &'static str,
     pub fields: &'static [(&'static str, Kind)],
-    /// The date that places a row in a btw quarter / tax year.
     pub date_field: Option<&'static str>,
-    /// Whether a filed btw quarter locks it (costs and sales), or only a filed
-    /// tax year (hours, trips, assets).
     pub btw_relevant: bool,
     pub order_by: &'static str,
     pub lines: Option<Lines>,
@@ -81,7 +67,6 @@ pub const DOCUMENTS: Entity = Entity {
 pub const INVOICES: Entity = Entity {
     name: "invoices",
     table: "invoices",
-    // `number`, `sent_at` and `paid_at` are set by their own endpoints only.
     fields: &[("client_id", OptText), ("date", Text), ("due_date", Text), ("status", Text), ("vat_scheme", Text), ("note", Text)],
     date_field: Some("date"),
     btw_relevant: true,
@@ -145,7 +130,6 @@ pub const CATEGORIES: Entity = Entity {
 pub const BANK: Entity = Entity {
     name: "bank_transactions",
     table: "bank_transactions",
-    // Rows come from an import; only the match and the private flag change.
     fields: &[("matched_kind", Text), ("matched_id", Text), ("ignored", Bool)],
     date_field: Some("date"),
     btw_relevant: false,
@@ -210,7 +194,6 @@ fn kind_of(fields: &[(&str, Kind)], name: &str) -> Option<Kind> {
     fields.iter().find(|(f, _)| *f == name).map(|(_, k)| *k)
 }
 
-/// A JSON value as a parameter for a column of the given kind.
 fn to_param(kind: Kind, field: &str, v: &Value) -> ApiResult<Box<dyn ToSql>> {
     let bad = || ApiError::bad(format!("Ongeldige waarde voor {field}"));
     Ok(match (kind, v) {
@@ -223,7 +206,6 @@ fn to_param(kind: Kind, field: &str, v: &Value) -> ApiResult<Box<dyn ToSql>> {
     })
 }
 
-/// A row as a JSON object; integer columns named in `bools` become booleans.
 pub fn row_json(row: &rusqlite::Row, bools: &[&str]) -> rusqlite::Result<Map<String, Value>> {
     let mut out = Map::new();
     let stmt = row.as_ref();
@@ -304,7 +286,6 @@ pub fn list(conn: &Connection, e: &Entity, q: &ListQuery) -> ApiResult<Vec<Value
     Ok(out)
 }
 
-/// The filed period that locks `date` for this entity, if any.
 pub fn lock_for(conn: &Connection, e: &Entity, date: &str) -> ApiResult<Option<String>> {
     if date.len() < 7 {
         return Ok(None);
@@ -366,7 +347,6 @@ fn write_lines(conn: &Connection, lines: &Lines, parent: &str, items: &[Value]) 
     Ok(())
 }
 
-/// Creates a row from `body`, or returns the existing one with the same id.
 pub fn create(conn: &mut Connection, e: &Entity, body: &Value) -> ApiResult<Value> {
     let obj = body.as_object().ok_or_else(|| ApiError::bad("Verwacht een object"))?;
     let id = obj.get("id").and_then(Value::as_str).map(str::to_string).unwrap_or_else(db::new_id);
@@ -396,7 +376,6 @@ pub fn create(conn: &mut Connection, e: &Entity, body: &Value) -> ApiResult<Valu
     Ok(after)
 }
 
-/// Applies the fields present in `body` (and replaces `lines` when given).
 pub fn update(conn: &mut Connection, e: &Entity, id: &str, body: &Value) -> ApiResult<Value> {
     let obj = body.as_object().ok_or_else(|| ApiError::bad("Verwacht een object"))?;
     let before = get(conn, e, id)?.ok_or_else(ApiError::not_found)?;

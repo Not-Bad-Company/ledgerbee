@@ -1,6 +1,3 @@
-// Bank statements: import, match to invoices and receipts, and the list of
-// payments that still need a bonnetje.
-
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -56,7 +53,6 @@ class _BankScreenState extends State<BankScreen> {
     _reload();
   }
 
-  /// A cost made from a bank line: amount, date and payee already filled in.
   Future<void> _makeCost(Map tx) async {
     final amount = -(tx['amount_cents'] as int);
     final vat = vatFromIncl(amount, '21');

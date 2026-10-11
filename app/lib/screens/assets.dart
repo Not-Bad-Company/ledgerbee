@@ -1,6 +1,3 @@
-// Business assets of € 450 or more (excl. btw): depreciated over their
-// useful life instead of being a cost at once, and counted for the KIA.
-
 import 'package:flutter/material.dart';
 
 import '../api.dart';

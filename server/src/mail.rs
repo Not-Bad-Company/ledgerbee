@@ -1,6 +1,3 @@
-//! E-mail through Brevo's HTTP API, the same provider and key setup as
-//! Krentenweger (`BREVO_API_KEY`, `EMAIL_FROM_ADDRESS`, `EMAIL_FROM_NAME`).
-
 use anyhow::{bail, Context, Result};
 use base64::Engine;
 use serde_json::json;

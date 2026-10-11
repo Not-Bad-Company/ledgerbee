@@ -70,8 +70,6 @@ final destinations = <Destination>[
   Destination('Instellingen', Icons.settings_outlined, () => const SettingsScreen()),
 ];
 
-/// Lets any screen switch the main section (the overview's cards do).
-// Debug builds can open on another section (screenshots): --dart-define=BOEK_SECTION=2.
 final ValueNotifier<int> currentSection = ValueNotifier(kDebugMode ? const int.fromEnvironment('BOEK_SECTION') : 0);
 
 int sectionIndex(String label) => destinations.indexWhere((d) => d.label == label);
@@ -93,8 +91,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
     Api.instance.flush();
     Notify.scheduleDeadlines();
     if (Platform.isAndroid) {
-      // A file shared to the app while it runs, or the one that started it.
-      // See MainActivity.kt: it copies the shared file and sends its path.
       _share.setMethodCallHandler((call) async {
         if (call.method == 'shared') await _shared(call.arguments as String?);
       });
@@ -151,7 +147,6 @@ class _ShellState extends State<Shell> with WidgetsBindingObserver {
             ]),
           );
         }
-        // Phone: four tabs and the rest under "Meer".
         const tabs = 4;
         final inMore = index >= tabs;
         return Scaffold(

@@ -1,7 +1,3 @@
-// The server connection: login, JSON requests, file uploads, a read cache
-// so the app opens without a network, and an outbox so a receipt scanned
-// offline is sent once the server is reachable again.
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -24,8 +20,6 @@ class ApiException implements Exception {
 
 const _uuid = Uuid();
 
-/// Hosts where plain http is acceptable: the device itself, the home network,
-/// and Tailscale (whose WireGuard tunnel already encrypts everything).
 bool privateHost(String host) {
   final h = host.toLowerCase();
   if (h == 'localhost' || !h.contains('.') || h.endsWith('.local') || h.endsWith('.lan') || h.endsWith('.home.arpa') || h.endsWith('.ts.net')) {
@@ -58,11 +52,9 @@ class Api extends ChangeNotifier {
     try {
       _token = await _storage.read(key: 'token');
     } catch (_) {
-      // No keyring on this desktop session: fall back to preferences.
       _token = _prefs.getString('token_fallback');
     }
     pending = _outbox().length;
-    // Debug builds only: start signed in to a test server (screenshots, tests).
     const testUrl = String.fromEnvironment('BOEK_URL');
     const testToken = String.fromEnvironment('BOEK_TOKEN');
     if (kDebugMode && testUrl != '' && testToken != '') {
@@ -164,7 +156,6 @@ class Api extends ChangeNotifier {
     }
   }
 
-  /// A GET that falls back to the last answer when the server is unreachable.
   Future<dynamic> get(String path) async {
     try {
       final res = await _send('GET', '$baseUrl$path');
@@ -188,7 +179,6 @@ class Api extends ChangeNotifier {
   Future<Map<String, dynamic>> uploadTo(String path, Uint8List data) async =>
       Map<String, dynamic>.from(await _send('POST', '$baseUrl$path', bytes: data) as Map);
 
-  // Typed helpers for the generic tables.
   Future<List<Map<String, dynamic>>> list(String entity, {String? from, String? to, String? status}) async {
     final q = <String, String>{'from': ?from, 'to': ?to, 'status': ?status};
     final query = q.isEmpty ? '' : '?${Uri(queryParameters: q).query}';
@@ -205,7 +195,6 @@ class Api extends ChangeNotifier {
 
   Future<void> remove(String entity, String id) => delete('/api/data/$entity/$id');
 
-  // Cache.
   Map<String, dynamic> _cache() {
     try {
       return Map<String, dynamic>.from(jsonDecode(_prefs.getString('cache') ?? '{}') as Map);
@@ -218,7 +207,6 @@ class Api extends ChangeNotifier {
     if (value is Uint8List) return;
     final c = _cache();
     c[path] = value;
-    // Bounded: the newest 60 answers.
     while (c.length > 60) {
       c.remove(c.keys.first);
     }
@@ -227,7 +215,6 @@ class Api extends ChangeNotifier {
 
   dynamic _cacheGet(String path) => _cache()[path];
 
-  // Outbox: documents created while offline, with the photo on disk.
   List<Map<String, dynamic>> _outbox() {
     try {
       return (jsonDecode(_prefs.getString('outbox') ?? '[]') as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -242,8 +229,6 @@ class Api extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sends a new document now, or keeps it (and its file) until the server
-  /// is reachable. The id is made here, so a resend creates nothing twice.
   Future<Map<String, dynamic>?> createDocument(Map<String, dynamic> doc, Uint8List? file) async {
     doc = {...doc, 'id': doc['id'] ?? newId()};
     try {
@@ -286,7 +271,6 @@ class Api extends ChangeNotifier {
           if (path != null && File(path).existsSync()) File(path).deleteSync();
         } on ApiException catch (e) {
           if (e.offline) break;
-          // The server refused it for good (a filed period): drop it but say so.
           debugPrint('outbox item dropped: ${e.message}');
         }
         items = items.sublist(1);

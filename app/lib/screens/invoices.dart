@@ -1,5 +1,3 @@
-// Sales invoices and clients.
-
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -12,7 +10,6 @@ import '../format.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
-/// The same totals the server computes: btw per rate over the summed base.
 ({int excl, int vat, int incl, Map<String, (int, int)> perRate}) invoiceTotals(String scheme, List<Map<String, dynamic>> lines) {
   final perRate = <String, (int, int)>{};
   for (final l in lines) {

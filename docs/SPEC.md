@@ -1,8 +1,8 @@
-# Boekhouding — design
+# Goudgulden: design
 
-Bookkeeping for Not Bad Company (eenmanszaak, KvK 42185336, owner Daan
-Hessen). Written 2026-10-06 from a brainstorm with the owner; he then asked
-for autonomous build.
+How Goudgulden is put together and why. It started as the bookkeeping for
+Not Bad Company, an eenmanszaak, and every decision below was made for a
+business of one.
 
 ## Goal
 
@@ -28,11 +28,10 @@ administration, filing directly with the
 Belastingdienst (no Digipoort; numbers are copied into Mijn Belastingdienst
 Zakelijk), double-entry ledger, iOS, web.
 
-## Decisions (owner)
+## Decisions
 
 | Topic | Decision |
 |---|---|
-| Home | Own app for Not Bad Company, separate from Krentenweger |
 | Storage | Own server (Pi, later Hetzner VPS), synced; 7-year bewaarplicht |
 | Btw | Normal regime, quarterly aangifte, no KOR |
 | Scanning | On-device OCR (Google ML Kit), deterministic parser, user confirms; no LLM |
@@ -55,9 +54,7 @@ boekhouding/
 **Server.** Single user. JSON API under `/api`. SQLite at
 `$BOEK_DATA/boekhouding.db`; attachments content-addressed at
 `$BOEK_DATA/files/<sha256>` and never deleted (bewaarplicht). A background
-task sends reminder e-mails (Brevo HTTP API, the same provider Krentenweger
-uses) once a day. Same Rust toolchain and crate choices as krentenweger-web
-so one person maintains both.
+task sends reminder e-mails (Brevo HTTP API) once a day.
 
 **Auth.** One account. Password (argon2) + TOTP (RFC 6238). Login returns a
 device token (random 32 bytes, stored hashed) that the app keeps in secure
@@ -77,36 +74,36 @@ scanning in a shop.
 All money in integer cents. All dates ISO `YYYY-MM-DD`. Every table has
 `id` (UUID text), `created_at`, `updated_at`.
 
-- `documents` — incoming cost: kind (`bonnetje`, `factuur`), date, supplier
+- `documents`: incoming cost: kind (`bonnetje`, `factuur`), date, supplier
   name, supplier_id, total_cents, currency (EUR only), file sha256, ocr_text,
   status (`concept`, `bevestigd`), note, paid_private (paid from private
   account).
-- `document_lines` — document_id, description, amount_excl_cents,
+- `document_lines`: document_id, description, amount_excl_cents,
   vat_rate (`21`, `9`, `0`, `vrijgesteld`, `verlegd_eu`, `verlegd_buiten_eu`,
   `geen`), vat_cents, category_id, business_pct (default 100).
-- `categories` — name, ib_group (IB aangifte cost group: `auto`,
+- `categories`: name, ib_group (IB aangifte cost group: `auto`,
   `huisvesting`, `kantoor`, `verkoop`, `overig`, `afschrijving`), deductible_pct
   (e.g. representatie 80), vat_deductible (bool). Seeded.
-- `suppliers` — name, kvk, vat_id, default_category_id, match_terms
+- `suppliers`: name, kvk, vat_id, default_category_id, match_terms
   (lowercase tokens seen on receipts/bank lines, learned from corrections).
-- `clients` — name, contact, email, address, kvk, vat_id, country,
+- `clients`: name, contact, email, address, kvk, vat_id, country,
   is_business, payment_days (default 14).
-- `invoices` — number (`YYYY-NNN`, gap-free, assigned when finalised),
+- `invoices`: number (`YYYY-NNN`, gap-free, assigned when finalised),
   client_id, date, due_date, status (`concept`, `verzonden`, `betaald`),
   vat_scheme (`nl`, `verlegd_eu`, `export`), note, sent_at, paid_at.
-- `invoice_lines` — invoice_id, description, quantity_milli, unit_cents,
+- `invoice_lines`: invoice_id, description, quantity_milli, unit_cents,
   vat_rate.
-- `bank_transactions` — date, amount_cents (+in / −out), counterparty,
+- `bank_transactions`: date, amount_cents (+in / −out), counterparty,
   iban, description, import_hash (dedupe), matched_kind/matched_id,
   ignored (private).
-- `assets` — name, purchase_date, cost_cents (excl. btw), useful_years,
+- `assets`: name, purchase_date, cost_cents (excl. btw), useful_years,
   residual_cents, business_pct, document_id, disposed_date.
-- `hours` — date, minutes, client_id, description.
-- `trips` — date, from, to, km_tenths, purpose, client_id, return_trip.
-- `periods` — kind (`btw_q`, `ib_year`), key (`2026-Q4`, `2026`), status
+- `hours`: date, minutes, client_id, description.
+- `trips`: date, from, to, km_tenths, purpose, client_id, return_trip.
+- `periods`: kind (`btw_q`, `ib_year`), key (`2026-Q4`, `2026`), status
   (`open`, `ingediend`), filed_at, filed_numbers (JSON snapshot).
-- `audit_log` — table, row id, action, before JSON, after JSON, at.
-- `settings` — key/value: company details (entered in the app; `BOEK_COMPANY_*`/`NBC_*` env vars fill empty fields), start date
+- `audit_log`: table, row id, action, before JSON, after JSON, at.
+- `settings`: key/value: company details (entered in the app; `BOEK_COMPANY_*`/`NBC_*` env vars fill empty fields), start date
   (for startersaftrek), starter years used, reminder e-mail.
 
 A filed period locks every record dated inside it: the server refuses
@@ -119,14 +116,14 @@ flagged in the reminder).
 Rubrieken computed for a quarter from confirmed documents and finalised
 invoices (factuurstelsel: by invoice date):
 
-- 1a leveringen/diensten 21% — base + btw
-- 1b 9% — base + btw
-- 1e 0% / niet bij u belast — base
-- 2a verlegd naar u binnenland — not used yet (0)
-- 3b leveringen naar/diensten in EU (B2B verlegd) — base
-- 3a buiten EU — base
-- 4a diensten uit landen buiten EU (reverse charge on costs, e.g. US SaaS) — base + 21% btw
-- 4b uit EU-landen (e.g. Hetzner DE, Google IE) — base + 21% btw
+- 1a leveringen/diensten 21%: base + btw
+- 1b 9%: base + btw
+- 1e 0% / niet bij u belast: base
+- 2a verlegd naar u binnenland: not used yet (0)
+- 3b leveringen naar/diensten in EU (B2B verlegd): base
+- 3a buiten EU: base
+- 4a diensten uit landen buiten EU (reverse charge on costs, e.g. US SaaS): base + 21% btw
+- 4b uit EU-landen (e.g. Hetzner DE, Google IE): base + 21% btw
 - 5a verschuldigde btw = 1a+1b+4a+4b
 - 5b voorbelasting = deductible btw on costs + 4a + 4b btw
 - 5g totaal te betalen / terug
@@ -183,8 +180,7 @@ attached without OCR (manual entry).
 ## Invoicing
 
 Client list, invoice editor (lines, vat per line, scheme), preview. The
-server renders the PDF (Typst-free: `printpdf`-style simple layout written
-with `genpdf`) with: seller name, address, KvK, btw-id (once set), IBAN,
+server renders the PDF with `printpdf`: seller name, address, KvK, btw-id (once set), IBAN,
 invoice number and date, client name/address (and client btw-id for EU
 reverse charge with the text "Btw verlegd"), lines, subtotal per rate, btw,
 total, payment term. Sending e-mails the PDF to the client via Brevo with a
@@ -232,12 +228,3 @@ Belastingdienst.
   tests through the router (`tower::ServiceExt::oneshot`).
 - App: unit tests for money and duration parsing and invoice totals (parity
   with the server); Linux build and Android debug build must succeed.
-
-## Build order
-
-1. Server core: schema, auth, CRUD, attachments, audit, locking.
-2. Tax: btw quarter, IB year, assets, KIA, tax tables.
-3. Invoices + PDF + e-mail; bank import + matching; reminders job; PDF parse.
-4. App: login, overzicht, kosten + scanner, facturen, bank, uren/ritten/activa,
-   aangifte, instellingen, notifications, outbox.
-5. Deploy files + README. Deploying to the Pi waits for the owner.

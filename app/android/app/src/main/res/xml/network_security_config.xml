@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Cleartext is allowed at this level because a self-hosted server can live
-     at any home-network or Tailscale address. The app itself refuses plain
-     http to anything else (privateHost in lib/api.dart). -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

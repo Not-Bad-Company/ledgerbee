@@ -1,7 +1,3 @@
-//! Attachments: photos of receipts, PDF invoices, statements. Stored once
-//! under their SHA-256 and never deleted, because of the seven-year
-//! bewaarplicht: deleting a document leaves its file in place.
-
 use crate::config;
 use crate::error::{ApiError, ApiResult};
 use sha2::{Digest, Sha256};
@@ -38,7 +34,6 @@ pub fn store(bytes: &[u8]) -> ApiResult<String> {
     Ok(sha)
 }
 
-/// The media type, from the first bytes.
 pub fn sniff(bytes: &[u8]) -> &'static str {
     if bytes.starts_with(b"%PDF") {
         "application/pdf"
@@ -55,9 +50,6 @@ pub fn sniff(bytes: &[u8]) -> &'static str {
     }
 }
 
-/// The text layer of a PDF, through poppler's `pdftotext -layout`. A scanned
-/// PDF without one returns little or nothing; the app then asks for manual
-/// entry.
 pub async fn pdf_text(bytes: &[u8]) -> ApiResult<String> {
     let tmp = tempfile::NamedTempFile::new()?;
     std::fs::write(tmp.path(), bytes)?;

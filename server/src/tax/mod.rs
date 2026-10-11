@@ -1,26 +1,13 @@
-//! Tax figures per year, and the calculations that use them.
-//!
-//! The figures are data: a new year is a new `TaxYear` in `YEARS`, checked
-//! against the Belastingdienst's own page. A year that is not in the table
-//! uses the newest one there, and the report says so.
-
 pub mod btw;
 pub mod ib;
 
 pub struct TaxYear {
     pub year: i32,
-    /// Zelfstandigenaftrek, cents.
     pub zelfstandigenaftrek: i64,
-    /// Startersaftrek, cents.
     pub startersaftrek: i64,
-    /// MKB-winstvrijstelling in basis points (12,70% = 1270).
     pub mkb_bp: i64,
-    /// Urencriterium, hours.
     pub uren: i64,
-    /// Kilometre deduction for an own (private) car, cents per km.
     pub km_cents: i64,
-    /// KIA: no deduction up to and including `kia_min` total investment, and
-    /// none above `kia_max`.
     pub kia_min: i64,
     pub kia_pct_until: i64,
     pub kia_pct: i64,
@@ -28,14 +15,11 @@ pub struct TaxYear {
     pub kia_flat: i64,
     pub kia_max: i64,
     pub kia_taper_bp: i64,
-    /// An investment counts for the KIA from this amount (excl. btw).
     pub kia_item_min: i64,
-    /// Box 1 brackets: (upper bound in cents or i64::MAX, rate in basis points).
     pub box1: &'static [(i64, i64)],
     pub source: &'static str,
 }
 
-/// Checked 2026-10-06 against mkbservicedesk.nl, rabobank.nl, taxlive.nl.
 pub const YEARS: &[TaxYear] = &[TaxYear {
     year: 2026,
     zelfstandigenaftrek: 1_200_00,
@@ -55,7 +39,6 @@ pub const YEARS: &[TaxYear] = &[TaxYear {
     source: "Belastingplan 2026: zelfstandigenaftrek €1.200, startersaftrek €2.123, MKB-winstvrijstelling 12,70%, KIA-tabel 2026, box 1 35,70/37,56/49,50%",
 }];
 
-/// The table for `year`, and whether it is really that year's.
 pub fn year(year: i32) -> (&'static TaxYear, bool) {
     match YEARS.iter().find(|t| t.year == year) {
         Some(t) => (t, true),
@@ -63,14 +46,12 @@ pub fn year(year: i32) -> (&'static TaxYear, bool) {
     }
 }
 
-/// `amount × bp / 10000`, rounded half away from zero.
 pub fn bp(amount: i64, bp: i64) -> i64 {
     let n = amount as i128 * bp as i128;
     let q = (n.abs() + 5000) / 10000;
     (if n < 0 { -q } else { q }) as i64
 }
 
-/// `amount × pct / 100`, rounded.
 pub fn pct(amount: i64, pct: i64) -> i64 {
     bp(amount, pct * 100)
 }
@@ -88,7 +69,6 @@ impl TaxYear {
         }
     }
 
-    /// Box 1 tax on `income`, without any heffingskorting.
     pub fn box1_tax(&self, income: i64) -> i64 {
         let mut tax = 0;
         let mut lower = 0;

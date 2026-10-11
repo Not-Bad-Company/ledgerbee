@@ -1,8 +1,7 @@
 # Goudgulden roadmap
 
 What it takes to be a free, self-hosted alternative to Moneybird, e-Boekhouden
-and Jortt for one eenmanszaak. Ordered by what matters most; sources in
-[research/market-2026-10.md](research/market-2026-10.md).
+and Jortt for one eenmanszaak, ordered by what matters most.
 
 ## Now
 

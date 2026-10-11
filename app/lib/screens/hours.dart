@@ -1,5 +1,3 @@
-// Hours for the urencriterium (1.225 a year), with a timer for the day.
-
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -10,7 +8,6 @@ import '../format.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
-/// "2,5", "2.5", "2:30", "150m" → minutes.
 int? parseDuration(String s) {
   s = s.trim().toLowerCase();
   final hm = RegExp(r'^(\d+):(\d{1,2})$').firstMatch(s);
@@ -90,8 +87,6 @@ class _HoursScreenState extends State<HoursScreen> {
         final total = hours.fold<int>(0, (s, h) => s + (h['minutes'] as int));
         final weekStart = DateTime.now().subtract(Duration(days: DateTime.now().weekday - 1));
         final week = hours.where((h) => (h['date'] as String).compareTo(iso(weekStart)) >= 0).fold<int>(0, (s, h) => s + (h['minutes'] as int));
-        // 1.225 hours in the calendar year, also in the year the business
-        // starts (no pro rata): what is left, per remaining week.
         final left = (1225 * 60 - total).clamp(0, 1225 * 60);
         final weeksLeft = (DateTime(year, 12, 31).difference(DateTime.now()).inDays + 1) / 7;
         final perWeek = weeksLeft <= 0 ? left / 60 : left / 60 / weeksLeft;

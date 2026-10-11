@@ -1,9 +1,3 @@
-//! The quarterly btw-aangifte, in the Belastingdienst's rubrieken.
-//!
-//! Factuurstelsel: sales count by invoice date, costs by document date.
-//! Only confirmed documents and final invoices count; what is still a
-//! concept is listed as a warning so nothing is forgotten silently.
-
 use crate::entities::{self, DOCUMENTS};
 use crate::error::{ApiError, ApiResult};
 use crate::invoices;
@@ -19,18 +13,14 @@ pub struct Rubriek {
     pub label: &'static str,
     pub base_cents: i64,
     pub vat_cents: i64,
-    /// What goes in the form: whole euros, rounded in your favour (omzet and
-    /// verschuldigde btw down, voorbelasting up).
     pub base_eur: i64,
     pub vat_eur: i64,
     pub has_base: bool,
-    /// The invoices and costs behind the figure, so it can be checked before filing.
     pub sources: Vec<Source>,
 }
 
 #[derive(Serialize, Debug, Clone, Default)]
 pub struct Source {
-    /// `invoice` or `document`.
     pub kind: &'static str,
     pub id: String,
     pub date: String,
@@ -39,7 +29,6 @@ pub struct Source {
     pub vat_cents: i64,
 }
 
-/// Adds one record's share to a rubriek's list, merging lines of the same record.
 fn note(sources: &mut HashMap<&'static str, Vec<Source>>, code: &'static str, src: Source) {
     let list = sources.entry(code).or_default();
     match list.iter_mut().find(|x| x.id == src.id && x.kind == src.kind) {
@@ -58,7 +47,6 @@ pub struct BtwReport {
     pub to: String,
     pub deadline: String,
     pub rubrieken: Vec<Rubriek>,
-    /// 5g in cents (positive: to pay) and in the form's whole euros.
     pub total_cents: i64,
     pub total_eur: i64,
     pub warnings: Vec<String>,
@@ -66,7 +54,6 @@ pub struct BtwReport {
     pub filed_at: Option<String>,
 }
 
-/// `2026-Q4` → (first day, last day, deadline: last day of the next month).
 pub fn quarter_bounds(key: &str) -> ApiResult<(NaiveDate, NaiveDate, NaiveDate)> {
     let bad = || ApiError::bad("Kwartaal als 2026-Q4");
     let (y, q) = key.split_once("-Q").ok_or_else(bad)?;
@@ -115,7 +102,6 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
     let mut warnings = vec![];
     let mut sources: HashMap<&'static str, Vec<Source>> = HashMap::new();
 
-    // Sales.
     let client_names: HashMap<String, String> = {
         let mut stmt = conn.prepare("SELECT id, name FROM clients")?;
         let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
@@ -131,7 +117,6 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
                 ("nl", "21") => ("1a", rt.vat_cents),
                 ("nl", "9") => ("1b", rt.vat_cents),
                 ("verlegd_eu", _) => ("3b", 0),
-                // Services to a business outside the EU are not taxed here.
                 _ => ("1e", 0),
             };
             add(code, rt.base_cents, vat);
@@ -155,7 +140,6 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
         warnings.push(if concepts == 1 { "1 conceptfactuur in dit kwartaal telt nog niet mee".to_string() } else { format!("{concepts} conceptfacturen in dit kwartaal tellen nog niet mee") });
     }
 
-    // Costs.
     let cats = categories(conn)?;
     let q = entities::ListQuery { from: Some(from_s.clone()), to: Some(to_s.clone()), ..Default::default() };
     let mut voorbelasting = 0i64;
@@ -201,8 +185,6 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
         warnings.push(if unconfirmed == 1 { "1 kostenpost in dit kwartaal is nog niet bevestigd en telt niet mee".to_string() } else { format!("{unconfirmed} kostenposten in dit kwartaal zijn nog niet bevestigd en tellen niet mee") });
     }
 
-    // Business payments from the bank in this quarter with no bon or invoice
-    // linked: their btw is missing from 5b until one is found.
     let unlinked: i64 = conn.query_row(
         "SELECT count(*) FROM bank_transactions WHERE amount_cents < 0 AND matched_id = '' AND ignored = 0 AND date BETWEEN ?1 AND ?2",
         [&from_s, &to_s],
@@ -289,7 +271,6 @@ mod tests {
         create(&mut c, &INVOICES, &json!({"id": "eu", "client_id": "c", "date": "2026-11-01", "vat_scheme": "verlegd_eu",
             "lines": [{"quantity_milli": 1000, "unit_cents": 50000, "vat_rate": "21"}]})).unwrap();
         crate::invoices::finalize(&mut c, "eu").unwrap();
-        // A concept: not counted, but warned about.
         create(&mut c, &INVOICES, &json!({"client_id": "c", "date": "2026-11-02"})).unwrap();
         create(&mut c, &DOCUMENTS, &json!({"date": "2026-10-03", "status": "bevestigd", "lines": [
             {"amount_excl_cents": 1000, "vat_rate": "21", "vat_cents": 210},
@@ -303,9 +284,7 @@ mod tests {
         assert_eq!((get("1a").base_cents, get("1a").vat_cents), (125000, 26250));
         assert_eq!(get("3b").base_cents, 50000);
         assert_eq!((get("4b").base_cents, get("4b").vat_cents), (4000, 840));
-        // 210 + half of 420 + nothing for representatie + 840 reverse charge.
         assert_eq!(get("5b").vat_cents, 210 + 210 + 840);
-        // Every figure can be traced back: the sources add up to the rubriek.
         for code in ["1a", "3b", "4b", "5b"] {
             let r = get(code);
             assert!(!r.sources.is_empty(), "{code} has sources");

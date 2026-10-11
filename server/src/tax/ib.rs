@@ -1,6 +1,3 @@
-//! The year's figures for the inkomstenbelasting: winst, ondernemersaftrek,
-//! MKB-winstvrijstelling, KIA, urencriterium, and the year-end balance.
-
 use crate::db;
 use crate::entities::{self, ASSETS, DOCUMENTS, HOURS, TRIPS};
 use crate::error::ApiResult;
@@ -26,7 +23,6 @@ pub struct IbReport {
     pub table_year: i32,
     pub table_source: &'static str,
     pub omzet_cents: i64,
-    /// Costs per IB cost group, after business share and deductible share.
     pub kosten: BTreeMap<String, i64>,
     pub kosten_cents: i64,
     pub afschrijvingen: Vec<AssetYear>,
@@ -56,8 +52,6 @@ pub struct Balans {
     pub debiteuren_cents: i64,
 }
 
-/// Months an asset is in use in `year` and before it, counting the month of
-/// purchase as a whole month and stopping at the month it was disposed of.
 fn months(purchase: NaiveDate, disposed: Option<NaiveDate>, year: i32) -> (i64, i64) {
     let idx = |d: NaiveDate| d.year() as i64 * 12 + d.month0() as i64;
     let start = idx(purchase);
@@ -101,7 +95,6 @@ pub fn report(conn: &Connection, year: i32) -> ApiResult<IbReport> {
         }
     }
 
-    // Costs.
     let cats: HashMap<String, (String, i64, bool)> = {
         let mut stmt = conn.prepare("SELECT id, ib_group, deductible_pct, vat_deductible FROM categories")?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? != 0))))?;
@@ -145,7 +138,6 @@ pub fn report(conn: &Connection, year: i32) -> ApiResult<IbReport> {
     }
     let kosten_cents: i64 = kosten.values().sum();
 
-    // Assets.
     let mut afschrijvingen = vec![];
     let mut investeringen = 0;
     let mut activa = 0;
@@ -174,7 +166,6 @@ pub fn report(conn: &Connection, year: i32) -> ApiResult<IbReport> {
     }
     let afschrijving_cents: i64 = afschrijvingen.iter().map(|a| a.depreciation_cents).sum();
 
-    // Kilometres.
     let mut km_tenths = 0;
     for trip in entities::list(conn, &TRIPS, &q)? {
         let k = trip["km_tenths"].as_i64().unwrap_or(0);
@@ -192,7 +183,6 @@ pub fn report(conn: &Connection, year: i32) -> ApiResult<IbReport> {
     let starter = db::setting(conn, "startersaftrek").map(|v| v == "ja").unwrap_or(true);
     let (mut za, sa) = if urencriterium { (t.zelfstandigenaftrek, if starter { t.startersaftrek } else { 0 }) } else { (0, 0) };
     if !starter {
-        // Without startersaftrek the zelfstandigenaftrek cannot exceed the winst.
         za = za.min(winst_na_kia.max(0));
     }
     let na_oa = winst_na_kia - za - sa;
@@ -250,7 +240,6 @@ mod tests {
 
     #[test]
     fn depreciation_is_linear_by_month() {
-        // €1.200 laptop, 3 years, bought in October: 3 of 36 months in year one.
         assert_eq!(depreciation(120000, 0, 3, d("2026-10-15"), None, 2026), (10000, 110000));
         assert_eq!(depreciation(120000, 0, 3, d("2026-10-15"), None, 2027), (40000, 70000));
         assert_eq!(depreciation(120000, 0, 3, d("2026-10-15"), None, 2029), (30000, 0));
@@ -276,7 +265,6 @@ mod tests {
 
         let r = report(&c, 2026).unwrap();
         assert_eq!(r.omzet_cents, 2000000);
-        // 1.000 + 80% of (100 + 21 btw not deductible).
         assert_eq!(r.kosten_cents, 100000 + 9680);
         assert_eq!(r.afschrijving_cents, 15000);
         assert_eq!(r.km_cents, 200 * 23);

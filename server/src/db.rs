@@ -1,13 +1,9 @@
-//! The SQLite database: pool, schema, small helpers.
-
 use anyhow::Result;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
 
 pub type Pool = r2d2::Pool<SqliteConnectionManager>;
 
-/// Each entry is one migration; `PRAGMA user_version` counts how many ran.
-/// Append, never edit.
 const MIGRATIONS: &[&str] = &[r#"
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
@@ -182,16 +178,12 @@ CREATE INDEX bank_date ON bank_transactions(date);
 CREATE INDEX hours_date ON hours(date);
 CREATE INDEX trips_date ON trips(date);
 "#, r#"
--- Payment reminders for overdue invoices.
 ALTER TABLE invoices ADD COLUMN reminded_at TEXT;
 ALTER TABLE invoices ADD COLUMN reminders INTEGER NOT NULL DEFAULT 0;
 "#, r#"
--- A credit invoice points at the invoice it corrects.
 ALTER TABLE invoices ADD COLUMN credit_of TEXT;
 "#];
 
-/// Categories every administration starts with. `ib_group` is the cost group
-/// of the IB aangifte; `investering` lines become assets, not costs.
 const SEED_CATEGORIES: &[(&str, &str, i64, bool)] = &[
     ("Software en abonnementen", "kantoor", 100, true),
     ("Hosting en domeinen", "kantoor", 100, true),
@@ -221,7 +213,6 @@ pub fn open(path: &std::path::Path) -> Result<Pool> {
     Ok(pool)
 }
 
-/// An in-memory database for tests (one connection, so every handle sees it).
 #[cfg(test)]
 pub fn memory() -> Pool {
     let manager = SqliteConnectionManager::memory().with_init(|c| c.execute_batch("PRAGMA foreign_keys = ON;"));
@@ -258,7 +249,6 @@ pub fn now() -> String {
     chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
-/// Today in the Netherlands.
 pub fn today() -> chrono::NaiveDate {
     chrono::Utc::now().with_timezone(&chrono_tz::Europe::Amsterdam).date_naive()
 }

@@ -9,12 +9,6 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
-/**
- * Receives a PDF or image shared to the app ("Delen met Boekhouding"), copies
- * it into the cache and hands Flutter its path over the "boekhouding/share"
- * channel: `initial` returns the file that started the app, `shared` is
- * called for one that arrives while it runs.
- */
 class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private var pending: String? = null

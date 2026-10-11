@@ -2,7 +2,6 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
-/// An error the API answers with: a status and a sentence for the app to show.
 #[derive(Debug)]
 pub struct ApiError(pub StatusCode, pub String);
 

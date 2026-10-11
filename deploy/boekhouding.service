@@ -1,19 +1,16 @@
 [Unit]
 Description=Boekhouding (self-hosted bookkeeping server)
-# If BOEK_BIND is a Tailscale address, the server has to wait for it.
 After=network-online.target tailscaled.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-# Adjust the user and /opt/boekhouding to where you cloned the repo.
 User=boekhouding
 Group=boekhouding
 WorkingDirectory=/opt/boekhouding/server
 ExecStart=/opt/boekhouding/server/target/release/boekhouding serve
 Restart=always
 RestartSec=2
-# BOEK_SECRET, BOEK_DATA, BOEK_BIND, BREVO_API_KEY, EMAIL_FROM_*: see server/.env.example.
 EnvironmentFile=/opt/boekhouding/server/.env
 MemoryMax=512M
 NoNewPrivileges=true

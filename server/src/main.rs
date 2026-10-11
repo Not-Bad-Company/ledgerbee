@@ -1,9 +1,3 @@
-//! Boekhouding: a self-hosted bookkeeping server for a Dutch eenmanszaak.
-//!
-//!   boekhouding serve                 run the API (BOEK_BIND, default 127.0.0.1:8090)
-//!   boekhouding create-user <email>   make (or replace) the account; asks the password on stdin
-//!   boekhouding digest                print today's reminder e-mail without sending it
-
 mod api;
 mod auth;
 mod bank;
@@ -74,7 +68,6 @@ async fn main() -> Result<()> {
             println!("Account {email} aangemaakt. Alle apparaten zijn uitgelogd.\n");
             println!("Scan deze code met je authenticator-app:\n");
             for row in &e.qr_rows {
-                // Two characters per module, with a quiet zone, dark on light.
                 let line: String = row.chars().map(|c| if c == '1' { "  " } else { "██" }).collect();
                 println!("████{line}████");
             }

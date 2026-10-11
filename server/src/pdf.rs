@@ -1,14 +1,8 @@
-//! The invoice as a PDF, with every field the Belastingdienst requires on a
-//! factuur (art. 35a Wet OB): seller and buyer, KvK, btw-id, a unique
-//! number, dates, description, amounts per rate, the btw, and the reverse
-//! charge wording when that applies.
-
 use crate::config::Company;
 use crate::invoices::{self, Totals};
 use printpdf::{BuiltinFont, IndirectFontRef, Line, Mm, PdfDocument, PdfLayerReference, Point, Rect};
 use serde_json::Value;
 
-/// `123456` → `€ 1.234,56`.
 pub fn eur(cents: i64) -> String {
     let neg = cents < 0;
     let c = cents.abs();
@@ -41,9 +35,6 @@ fn qty(milli: i64) -> String {
     }
 }
 
-/// The EPC QR code payload ("girocode", EPC069-12 version 002): banking apps
-/// that read it fill in the transfer by themselves. None when there is no
-/// IBAN, nothing to pay, or the text would not fit the 331-byte limit.
 pub fn epc_payload(name: &str, iban: &str, cents: i64, reference: &str) -> Option<String> {
     let iban: String = iban.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_uppercase();
     if iban.len() < 15 || cents <= 0 || cents > 99_999_999_999 {
@@ -55,7 +46,6 @@ pub fn epc_payload(name: &str, iban: &str, cents: i64, reference: &str) -> Optio
     (text.len() <= 331).then_some(text)
 }
 
-/// Splits text into lines of at most `max` characters, at spaces.
 fn wrap(text: &str, max: usize) -> Vec<String> {
     let mut out = vec![];
     let mut line = String::new();
@@ -82,8 +72,6 @@ impl Page<'_> {
     fn text(&self, s: &str, size: f32, x: f32, y: f32, bold: bool) {
         self.layer.use_text(s, size, Mm(x), Mm(y), if bold { self.bold } else { self.regular });
     }
-    /// Right-aligned at `x`, by Helvetica's average width; good enough for
-    /// digits, which all have the same width.
     fn right(&self, s: &str, size: f32, x: f32, y: f32, bold: bool) {
         let w = s.chars().count() as f32 * size * 0.556 * 0.3528;
         self.text(s, size, x - w, y, bold);
@@ -101,7 +89,6 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
     let bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)?;
     let p = Page { layer: doc.get_page(page).get_layer(layer), regular: &regular, bold: &bold };
 
-    // Seller.
     p.text(&company.name, 18.0, 20.0, 270.0, true);
     let mut y = 270.0;
     for line in [
@@ -119,7 +106,6 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
         p.right(&line, 9.0, 190.0, y, false);
     }
 
-    // Buyer.
     let mut by = 240.0;
     p.text("Factuur aan", 8.0, 20.0, by, false);
     for line in [
@@ -140,7 +126,6 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
         p.text(&line, 10.0, 20.0, by, false);
     }
 
-    // Invoice facts.
     let is_credit = !invoice["credit_of"].as_str().unwrap_or("").is_empty();
     p.text(if is_credit { "Creditfactuur" } else { "Factuur" }, 22.0, 20.0, 195.0, true);
     let facts = [
@@ -155,7 +140,6 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
         fy -= 5.0;
     }
 
-    // Lines.
     let mut ly = 160.0;
     p.text("Omschrijving", 9.0, 20.0, ly, true);
     p.right("Aantal", 9.0, 120.0, ly, true);
@@ -235,7 +219,6 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
             ly -= 4.5;
         }
     }
-    // Scan to pay, bottom right.
     let payee = if company.owner.is_empty() { &company.name } else { &company.owner };
     if let Some(payload) = epc_payload(payee, &company.iban, t.incl_cents, &format!("Factuur {number}")) {
         if let Ok(code) = qrcode::QrCode::with_error_correction_level(payload.as_bytes(), qrcode::EcLevel::M) {

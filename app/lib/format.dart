@@ -1,5 +1,3 @@
-// Money and dates the Dutch way. Amounts are whole cents everywhere.
-
 import 'package:intl/intl.dart';
 
 String eur(num? cents, {bool sign = false}) {
@@ -12,7 +10,6 @@ String eur(num? cents, {bool sign = false}) {
   return sign && c > 0 ? '+$s' : s;
 }
 
-/// "12,34", "1.234,56", "12.34", "€ 5" → cents; null when it is no amount.
 int? parseEur(String input) {
   var s = input.replaceAll(RegExp(r'[€\s]'), '').replaceAll('−', '-');
   if (s.isEmpty) return null;
@@ -36,7 +33,6 @@ int? parseEur(String input) {
   return neg ? -v : v;
 }
 
-/// Cents as an editable string: 123456 → "1234,56".
 String centsInput(num? cents) {
   final c = (cents ?? 0).round();
   return '${c < 0 ? '-' : ''}${c.abs() ~/ 100},${(c.abs() % 100).toString().padLeft(2, '0')}';
@@ -51,13 +47,11 @@ String iso(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.d
 
 String today() => iso(DateTime.now());
 
-/// "3 okt 2026"
 String shortDate(String? s) {
   final d = parseIso(s);
   return d == null ? '—' : '${d.day} ${_months[d.month - 1]} ${d.year}';
 }
 
-/// "3 oktober 2026"
 String longDate(String? s) {
   final d = parseIso(s);
   return d == null ? '—' : '${d.day} ${_monthsLong[d.month - 1]} ${d.year}';
@@ -84,7 +78,6 @@ const vatRates = <String, String>{
   'geen': 'Geen btw',
 };
 
-/// The btw inside an amount including btw, for a rate like "21".
 int vatFromIncl(int incl, String rate) {
   final r = int.tryParse(rate);
   if (r == null || r == 0) return 0;
@@ -92,5 +85,4 @@ int vatFromIncl(int incl, String rate) {
   return incl - base;
 }
 
-/// "1 bon", "3 bonnen".
 String count(int n, String one, String many) => '$n ${n == 1 ? one : many}';

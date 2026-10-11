@@ -1,5 +1,3 @@
-//! Sales invoices: totals, numbering, and the rows the reports read.
-
 use crate::db;
 use crate::entities::{self, INVOICES};
 use crate::error::{ApiError, ApiResult};
@@ -23,7 +21,6 @@ pub struct Totals {
     pub incl_cents: i64,
 }
 
-/// One line's amount: quantity (thousandths) × unit price, rounded to cents.
 pub fn line_amount(quantity_milli: i64, unit_cents: i64) -> i64 {
     let n = quantity_milli as i128 * unit_cents as i128;
     let q = (n.abs() + 500) / 1000;
@@ -34,9 +31,6 @@ fn rate_pct(rate: &str) -> i64 {
     rate.parse().unwrap_or(0)
 }
 
-/// Totals per btw rate, the btw computed once per rate over the summed base
-/// (not per line), which is how the law has it and avoids rounding drift.
-/// Under reverse charge or export no btw is charged whatever the lines say.
 pub fn totals(scheme: &str, lines: &[(i64, i64, String)]) -> Totals {
     let mut per_rate: Vec<RateTotal> = vec![];
     for (q, unit, rate) in lines {
@@ -75,18 +69,11 @@ pub fn totals_of(invoice: &Value) -> Totals {
     totals(scheme, &lines)
 }
 
-/// Every invoice that counts (not a concept) dated between `from` and `to`.
 pub fn final_between(conn: &Connection, from: &str, to: &str) -> ApiResult<Vec<Value>> {
     let q = entities::ListQuery { from: Some(from.into()), to: Some(to.into()), ..Default::default() };
     Ok(entities::list(conn, &INVOICES, &q)?.into_iter().filter(|i| i["status"] != "concept").collect())
 }
 
-/// Gives a concept its number (`YYYY-NNN`, the next in its year, never
-/// reused) and makes it final. Its lines and amounts cannot change after this.
-/// A concept credit invoice for a final one: the same client, scheme and
-/// lines with the quantities negated, dated today. Finalising it gives it the
-/// next number; the reports count its negative amounts in its own quarter,
-/// which is how a correction is meant to land.
 pub fn credit(conn: &mut Connection, id: &str) -> ApiResult<Value> {
     let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
     if inv["status"] == "concept" {
@@ -169,7 +156,6 @@ pub fn finalize(conn: &mut Connection, id: &str) -> ApiResult<Value> {
     Ok(after)
 }
 
-/// Marks paid (`date` given) or unpaid (`None`).
 pub fn set_paid(conn: &mut Connection, id: &str, date: Option<&str>) -> ApiResult<Value> {
     let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
     if inv["status"] == "concept" {
@@ -185,8 +171,6 @@ pub fn set_paid(conn: &mut Connection, id: &str, date: Option<&str>) -> ApiResul
     Ok(after)
 }
 
-/// A final invoice keeps its content: only the note may change, and status
-/// moves only through finalize/paid. Concepts are free.
 pub fn check_update(conn: &Connection, id: &str, body: &Value) -> ApiResult<()> {
     let inv = entities::get(conn, &INVOICES, id)?.ok_or_else(ApiError::not_found)?;
     if let Some(s) = body.get("status") {
@@ -195,7 +179,6 @@ pub fn check_update(conn: &Connection, id: &str, body: &Value) -> ApiResult<()> 
         }
     }
     if inv["status"] != "concept" {
-        // Only writable fields count; ids and timestamps sent along are ignored.
         let content = |k: &str| k == "lines" || INVOICES.fields.iter().any(|(f, _)| *f == k);
         let changes = |k: &str, v: &Value| content(k) && k != "note" && (k == "lines" || v != &inv[k]);
         if body.as_object().map(|o| o.iter().any(|(k, v)| changes(k, v))).unwrap_or(false) {
@@ -220,7 +203,6 @@ mod tests {
 
     #[test]
     fn btw_is_computed_per_rate_not_per_line() {
-        // Three lines of 0,33 at 21%: per line 0,07 × 3 = 0,21, per rate 0,99 × 21% = 0,21.
         let t = totals("nl", &[(1000, 33, "21".into()), (1000, 33, "21".into()), (1000, 33, "21".into()), (2000, 500, "9".into())]);
         assert_eq!(t.per_rate[0], RateTotal { rate: "21".into(), base_cents: 99, vat_cents: 21 });
         assert_eq!(t.per_rate[1], RateTotal { rate: "9".into(), base_cents: 1000, vat_cents: 90 });
