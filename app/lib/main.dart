@@ -36,7 +36,7 @@ class BoekhoudingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Goudgulden',
+      title: 'Ledgerbee',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       themeMode: ThemeMode.dark,

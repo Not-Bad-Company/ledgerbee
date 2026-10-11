@@ -6,21 +6,21 @@
 
 <br />
 <div align="center">
-  <a href="https://github.com/Not-Bad-Company/goudgulden">
-    <img src="docs/images/logo.png" alt="Goudgulden" width="96" height="96">
+  <a href="https://github.com/Not-Bad-Company/ledgerbee">
+    <img src="docs/images/logo.png" alt="Ledgerbee" width="96" height="96">
   </a>
 
-<h3 align="center">Goudgulden</h3>
+<h3 align="center">Ledgerbee</h3>
 
   <p align="center">
-    Free, self-hosted bookkeeping for a Dutch eenmanszaak.
+    Free, self-hosted bookkeeping for freelancers and one-person businesses.
     <br />
-    Scan receipts, send invoices, import the bank, and get the btw-aangifte and inkomstenbelasting figures ready to copy into Mijn Belastingdienst.
+    Scan receipts, send invoices and quotes, import the bank, and have your tax figures ready when they're due. The Netherlands is supported first.
     <br />
     <br />
-    <a href="https://github.com/Not-Bad-Company/goudgulden/issues/new?labels=bug">Report a bug</a>
+    <a href="https://github.com/Not-Bad-Company/ledgerbee/issues/new?labels=bug">Report a bug</a>
     &middot;
-    <a href="https://github.com/Not-Bad-Company/goudgulden/issues/new?labels=enhancement">Request a feature</a>
+    <a href="https://github.com/Not-Bad-Company/ledgerbee/issues/new?labels=enhancement">Request a feature</a>
   </p>
 </div>
 
@@ -40,12 +40,12 @@
 
 ## About the project
 
-![Goudgulden overview][product-screenshot]
+![Ledgerbee overview][product-screenshot]
 
-I run a one-person company in the Netherlands and didn't want to pay a monthly fee for bookkeeping software, so I built my own. Goudgulden does what a ZZP'er needs four times a year and once in spring, and nothing else:
+I run a one-person company and didn't want to pay a monthly fee for bookkeeping software, so I built my own. Ledgerbee covers what a freelancer needs every day and at every tax deadline. Tax rules live in a module per country; the Netherlands (btw and inkomstenbelasting) is the first, and the app itself is in Dutch for now.
 
 - **Receipts:** photograph a bon and the phone reads it (on the device, offline). Share a PDF invoice from your mail and the server reads its text layer. You check the draft and confirm.
-- **Invoices:** numbered without gaps, with every field the Belastingdienst requires, a scan-to-pay QR code, e-mail delivery, reminders for late payers and credit invoices for corrections.
+- **Invoices and quotes:** numbered without gaps, with every field the Belastingdienst requires, a scan-to-pay QR code, e-mail delivery, reminders for late payers and credit invoices for corrections. An accepted quote becomes an invoice in one tap.
 - **Bank:** import a CSV or CAMT.053 export from ING, Rabobank, ABN AMRO, Knab or bunq. Payments are matched to invoices and receipts, and payments without a receipt are listed.
 - **Btw-aangifte:** every rubriek from 1a to 5g for a quarter, in whole euros the way the form wants them. Tap a rubriek to see the invoices and costs behind it before you file.
 - **Inkomstenbelasting:** winst, urencriterium, zelfstandigenaftrek, startersaftrek, MKB-winstvrijstelling, KIA, depreciation and kilometres, from tax tables that are updated each year.
@@ -77,8 +77,8 @@ The server is a single Rust binary (axum, rusqlite) that holds all data and all 
 
 1. Clone the repo and configure the server:
    ```sh
-   git clone https://github.com/Not-Bad-Company/goudgulden.git
-   cd goudgulden/server
+   git clone https://github.com/Not-Bad-Company/ledgerbee.git
+   cd ledgerbee/server
    cp .env.example .env    # set BOEK_SECRET to the output of: openssl rand -hex 32
    cargo build --release
    ```
@@ -102,7 +102,7 @@ The server is a single Rust binary (axum, rusqlite) that holds all data and all 
 
 ## Usage
 
-- **When you pay:** tap *Kosten toevoegen*, photograph the bon or pick the PDF, check the draft, confirm. From another app, share the file to Goudgulden.
+- **When you pay:** tap *Kosten toevoegen*, photograph the bon or pick the PDF, check the draft, confirm. From another app, share the file to Ledgerbee.
 - **Once a month:** import the bank export, link the suggestions and find the receipts that are missing.
 - **Each quarter** (deadline: the last day of the following month): open *Aangifte → Btw*, check the rubrieken, copy the whole-euro figures into Mijn Belastingdienst Zakelijk, pay, then mark the quarter *Ingediend*.
 - **Before 1 May:** open *Aangifte → Inkomstenbelasting* for last year, export the year as a zip of CSVs and attachments if your accountant wants it, and file.
@@ -115,13 +115,14 @@ Backups run nightly: a consistent SQLite snapshot plus the attachments, kept for
 - [x] Receipts by camera, file or share sheet
 - [x] Btw-aangifte with the sources behind each rubriek
 - [x] Invoices with scan-to-pay, reminders and credit invoices
-- [ ] Quotes that turn into an invoice
+- [x] Quotes that turn into an invoice
 - [ ] Recurring invoices
 - [ ] Receipts forwarded by e-mail
 - [ ] UBL / Peppol export
+- [ ] English interface and more countries
 - [ ] Web version of the app
 
-The full list is in [docs/ROADMAP.md](docs/ROADMAP.md). See the [open issues](https://github.com/Not-Bad-Company/goudgulden/issues) for known bugs and requests.
+The full list is in [docs/ROADMAP.md](docs/ROADMAP.md). See the [open issues](https://github.com/Not-Bad-Company/ledgerbee/issues) for known bugs and requests.
 
 ## Contributing
 
@@ -134,13 +135,13 @@ Bug reports are the most useful contribution, especially wrong tax figures: say 
 
 ## License
 
-Goudgulden is free to use, change and self-host, for yourself or your own business, under the [Elastic License 2.0](LICENSE). You may not offer it to others as a hosted or managed service.
+Ledgerbee is free to use, change and self-host, for yourself or your own business, under the [Elastic License 2.0](LICENSE). You may not offer it to others as a hosted or managed service.
 
 ## Contact
 
 Daan Hessen, [Not Bad Company](https://notbadcompany.com) &middot; contact@notbadcompany.com
 
-Project link: [github.com/Not-Bad-Company/goudgulden](https://github.com/Not-Bad-Company/goudgulden)
+Project link: [github.com/Not-Bad-Company/ledgerbee](https://github.com/Not-Bad-Company/ledgerbee)
 
 ## Acknowledgments
 
@@ -151,12 +152,12 @@ Project link: [github.com/Not-Bad-Company/goudgulden](https://github.com/Not-Bad
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-[stars-shield]: https://img.shields.io/github/stars/Not-Bad-Company/goudgulden.svg?style=for-the-badge
-[stars-url]: https://github.com/Not-Bad-Company/goudgulden/stargazers
-[issues-shield]: https://img.shields.io/github/issues/Not-Bad-Company/goudgulden.svg?style=for-the-badge
-[issues-url]: https://github.com/Not-Bad-Company/goudgulden/issues
+[stars-shield]: https://img.shields.io/github/stars/Not-Bad-Company/ledgerbee.svg?style=for-the-badge
+[stars-url]: https://github.com/Not-Bad-Company/ledgerbee/stargazers
+[issues-shield]: https://img.shields.io/github/issues/Not-Bad-Company/ledgerbee.svg?style=for-the-badge
+[issues-url]: https://github.com/Not-Bad-Company/ledgerbee/issues
 [license-shield]: https://img.shields.io/badge/license-Elastic%202.0-D9A441.svg?style=for-the-badge
-[license-url]: https://github.com/Not-Bad-Company/goudgulden/blob/main/LICENSE
+[license-url]: https://github.com/Not-Bad-Company/ledgerbee/blob/main/LICENSE
 [product-screenshot]: docs/images/overzicht.png
 [rust-shield]: https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white
 [rust-url]: https://www.rust-lang.org/

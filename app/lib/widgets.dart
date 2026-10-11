@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'api.dart';
@@ -284,12 +286,37 @@ class AppMark extends StatelessWidget {
         alignment: AlignmentDirectional.centerStart,
         widthFactor: 1,
         heightFactor: 1,
-        child: Container(
-          width: size,
-          height: size,
-          color: night,
-          alignment: Alignment.center,
-          child: Text('ƒ', style: TextStyle(fontFamily: 'Schibsted Grotesk Ext', fontSize: size * 0.78, fontWeight: FontWeight.w700, color: accent, height: 1)),
-        ),
+        child: SizedBox.square(dimension: size, child: CustomPaint(painter: _MarkPainter())),
       );
+}
+
+class _MarkPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    canvas.drawRect(Offset.zero & size, Paint()..color = night);
+    final c = Offset(w / 2, w / 2);
+    final r = w * 0.34;
+    final hex = Path();
+    for (var i = 0; i < 6; i++) {
+      final a = (-90 + 60 * i) * math.pi / 180;
+      final p = c + Offset(r * math.cos(a), r * math.sin(a));
+      i == 0 ? hex.moveTo(p.dx, p.dy) : hex.lineTo(p.dx, p.dy);
+    }
+    hex.close();
+    canvas.drawPath(hex, Paint()
+      ..color = accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = w * 0.055
+      ..strokeJoin = StrokeJoin.round);
+    final fill = Paint()..color = accent;
+    final t = w * 0.045;
+    final left = c.dx - r / 2;
+    canvas.drawRect(Rect.fromLTWH(left + r * 0.35, c.dy - r * 0.32, r * 0.65, t), fill);
+    canvas.drawRect(Rect.fromLTWH(left, c.dy + r * 0.12, r, t), fill);
+    canvas.drawRect(Rect.fromLTWH(left, c.dy + r * 0.12 + t + w * 0.035, r, t), fill);
+  }
+
+  @override
+  bool shouldRepaint(_MarkPainter old) => false;
 }

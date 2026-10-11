@@ -1,7 +1,8 @@
-# Goudgulden roadmap
+# Ledgerbee roadmap
 
-What it takes to be a free, self-hosted alternative to Moneybird, e-Boekhouden
-and Jortt for one eenmanszaak, ordered by what matters most.
+What it takes to be a free, self-hosted alternative to the paid bookkeeping
+apps for freelancers, ordered by what matters most. The Netherlands is the
+first country; the tax rules are written so others can follow.
 
 ## Now
 
@@ -17,7 +18,7 @@ and Jortt for one eenmanszaak, ordered by what matters most.
 
 ## Next
 
-- [ ] Quotes (offertes) that become an invoice in one tap
+- [x] Quotes (offertes) that become an invoice in one tap
 - [ ] Recurring invoices (monthly retainer, hosting)
 - [ ] Receipts by e-mail: an IMAP mailbox the server reads, so forwarding a
       receipt is enough
@@ -26,6 +27,8 @@ and Jortt for one eenmanszaak, ordered by what matters most.
 - [ ] Web version of the app, served by the server itself
 
 ## Later
+
+- [ ] English interface, then tax modules for more countries
 
 - [ ] Bank feed through a PSD2 provider, for whoever has an account
 - [ ] KOR (kleineondernemersregeling) as a setting

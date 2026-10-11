@@ -1,6 +1,6 @@
-# Goudgulden: design
+# Ledgerbee: design
 
-How Goudgulden is put together and why. It started as the bookkeeping for
+How Ledgerbee is put together and why. It started as the bookkeeping for
 Not Bad Company, an eenmanszaak, and every decision below was made for a
 business of one.
 

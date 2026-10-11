@@ -1,5 +1,5 @@
 name: boekhouding
-description: "Self-hosted bookkeeping for a Dutch eenmanszaak."
+description: "Ledgerbee: self-hosted bookkeeping for freelancers."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -43,10 +43,6 @@ flutter:
         - asset: assets/fonts/SchibstedGrotesk-800.ttf
           weight: 800
     # Latin Extended, for the ƒ of the logo.
-    - family: Schibsted Grotesk Ext
-      fonts:
-        - asset: assets/fonts/SchibstedGroteskExt-700.ttf
-          weight: 700
     - family: Public Sans
       fonts:
         - asset: assets/fonts/PublicSans-400.ttf
