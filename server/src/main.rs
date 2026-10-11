@@ -11,6 +11,7 @@ mod invoices;
 mod mail;
 mod parse;
 mod pdf;
+mod quotes;
 mod reminders;
 mod tax;
 mod totp;

@@ -78,6 +78,20 @@ pub const INVOICES: Entity = Entity {
     }),
 };
 
+pub const QUOTES: Entity = Entity {
+    name: "quotes",
+    table: "quotes",
+    fields: &[("client_id", OptText), ("date", Text), ("valid_until", Text), ("status", Text), ("vat_scheme", Text), ("note", Text)],
+    date_field: None,
+    btw_relevant: false,
+    order_by: "date DESC, created_at DESC",
+    lines: Some(Lines {
+        table: "quote_lines",
+        parent_key: "quote_id",
+        fields: &[("description", Text), ("quantity_milli", Int), ("unit_cents", Int), ("vat_rate", Text)],
+    }),
+};
+
 pub const CLIENTS: Entity = Entity {
     name: "clients",
     table: "clients",
@@ -184,7 +198,7 @@ pub const TRIPS: Entity = Entity {
     lines: None,
 };
 
-pub const ALL: &[&Entity] = &[&DOCUMENTS, &INVOICES, &CLIENTS, &SUPPLIERS, &CATEGORIES, &BANK, &ASSETS, &HOURS, &TRIPS];
+pub const ALL: &[&Entity] = &[&DOCUMENTS, &INVOICES, &QUOTES, &CLIENTS, &SUPPLIERS, &CATEGORIES, &BANK, &ASSETS, &HOURS, &TRIPS];
 
 pub fn by_name(name: &str) -> Option<&'static Entity> {
     ALL.iter().copied().find(|e| e.name == name)

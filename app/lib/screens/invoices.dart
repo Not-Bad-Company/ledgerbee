@@ -35,20 +35,21 @@ class InvoicesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Facturen'),
-          bottom: const TabBar(tabs: [Tab(text: 'Facturen'), Tab(text: 'Klanten')]),
+          bottom: const TabBar(tabs: [Tab(text: 'Facturen'), Tab(text: 'Offertes'), Tab(text: 'Klanten')]),
         ),
-        body: const TabBarView(children: [_InvoiceList(), _ClientList()]),
+        body: const TabBarView(children: [_InvoiceList(), _InvoiceList(quotes: true), _ClientList()]),
       ),
     );
   }
 }
 
 class _InvoiceList extends StatefulWidget {
-  const _InvoiceList();
+  final bool quotes;
+  const _InvoiceList({this.quotes = false});
 
   @override
   State<_InvoiceList> createState() => _InvoiceListState();
@@ -58,26 +59,36 @@ class _InvoiceListState extends State<_InvoiceList> {
   final _key = GlobalKey<LoadedState<(List<Map<String, dynamic>>, Map<String, String>)>>();
 
   Future<(List<Map<String, dynamic>>, Map<String, String>)> _load() async {
-    final invoices = await Api.instance.list('invoices');
+    final invoices = await Api.instance.list(widget.quotes ? 'quotes' : 'invoices');
     final clients = await Api.instance.list('clients');
     return (invoices, {for (final c in clients) c['id'] as String: c['name'] as String});
   }
 
   Future<void> _open(Map<String, dynamic>? inv) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceEditor(invoice: inv)));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceEditor(invoice: inv, quote: widget.quotes)));
     _key.currentState?.reload();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _open(null), icon: const Icon(Icons.add), label: const Text('Nieuwe factuur')),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: widget.quotes ? 'quote' : 'invoice',
+        onPressed: () => _open(null),
+        icon: const Icon(Icons.add),
+        label: Text(widget.quotes ? 'Nieuwe offerte' : 'Nieuwe factuur'),
+      ),
       body: Loaded<(List<Map<String, dynamic>>, Map<String, String>)>(
         key: _key,
         load: _load,
         builder: (context, data, reload) {
           final (invoices, clients) = data;
-          if (invoices.isEmpty) return const EmptyState(icon: Icons.request_quote_outlined, text: 'Nog geen facturen.');
+          if (invoices.isEmpty) {
+            return EmptyState(
+              icon: Icons.request_quote_outlined,
+              text: widget.quotes ? 'Nog geen offertes. Een geaccepteerde offerte wordt met één tik een factuur.' : 'Nog geen facturen.',
+            );
+          }
           final now = today();
           return ListView(padding: const EdgeInsets.all(16), children: [
             Readable(
@@ -85,9 +96,11 @@ class _InvoiceListState extends State<_InvoiceList> {
                 child: Column(children: [
                   for (final inv in invoices)
                     ListTile(
-                      leading: _statusIcon(inv, now),
+                      leading: widget.quotes ? _quoteIcon(inv) : _statusIcon(inv, now),
                       title: Text(clients[inv['client_id']] ?? 'Geen klant'),
-                      subtitle: Text('${inv['number'] ?? 'Concept'} · ${shortDate(inv['date'])}${_overdue(inv, now) ? ' · over de vervaldatum' : ''}'),
+                      subtitle: Text(widget.quotes
+                          ? '${inv['number'] ?? 'Concept'} · ${shortDate(inv['date'])} · ${inv['status']}'
+                          : '${inv['number'] ?? 'Concept'} · ${shortDate(inv['date'])}${_overdue(inv, now) ? ' · over de vervaldatum' : ''}'),
                       trailing: Text(eur(invoiceTotals(inv['vat_scheme'] as String, (inv['lines'] as List).cast<Map<String, dynamic>>()).incl), style: amountStyle(context)),
                       onTap: () => _open(inv),
                     ),
@@ -102,6 +115,13 @@ class _InvoiceListState extends State<_InvoiceList> {
   }
 
   static bool _overdue(Map inv, String now) => inv['status'] == 'verzonden' && (inv['due_date'] as String).compareTo(now) < 0;
+
+  static Widget _quoteIcon(Map q) => switch (q['status']) {
+        'geaccepteerd' => Icon(Icons.check_circle, color: green),
+        'afgewezen' => const Icon(Icons.block, color: faint),
+        'verzonden' => const Icon(Icons.schedule),
+        _ => Icon(Icons.edit_note, color: amber),
+      };
 
   static Widget _statusIcon(Map inv, String now) {
     if (inv['status'] == 'betaald') return Icon(Icons.check_circle, color: green);
@@ -130,7 +150,8 @@ class _InvLine {
 
 class InvoiceEditor extends StatefulWidget {
   final Map<String, dynamic>? invoice;
-  const InvoiceEditor({super.key, this.invoice});
+  final bool quote;
+  const InvoiceEditor({super.key, this.invoice, this.quote = false});
 
   @override
   State<InvoiceEditor> createState() => _InvoiceEditorState();
@@ -143,7 +164,10 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
   List<Map<String, dynamic>> _clients = [];
   bool _busy = false;
 
-  bool get _concept => inv['status'] == 'concept';
+  bool get _quote => widget.quote;
+  bool get _concept => _quote ? (inv['invoice_id'] as String? ?? '').isEmpty : inv['status'] == 'concept';
+  String get _entity => _quote ? 'quotes' : 'invoices';
+  String get _kind => _quote ? 'Offerte' : 'Factuur';
   bool get _existing => inv['created_at'] != null;
 
   @override
@@ -162,10 +186,10 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
         ...inv,
         'note': _note.text.trim(),
         'lines': _lines.map((l) => l.toJson()).toList(),
-      }..removeWhere((k, _) => ['number', 'sent_at', 'paid_at', 'updated_at', 'reminded_at', 'reminders', 'credit_of'].contains(k));
+      }..removeWhere((k, _) => ['number', 'sent_at', 'paid_at', 'updated_at', 'reminded_at', 'reminders', 'credit_of', 'invoice_id'].contains(k));
 
   Future<bool> _store() async {
-    final saved = await guard(context, () => Api.instance.save('invoices', _concept ? _body : {'id': inv['id'], 'note': _note.text.trim(), 'created_at': inv['created_at']}));
+    final saved = await guard(context, () => Api.instance.save(_entity, _concept ? _body : {'id': inv['id'], 'note': _note.text.trim(), 'created_at': inv['created_at']}));
     if (saved == null) return false;
     setState(() => inv = saved);
     return true;
@@ -191,9 +215,9 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
 
   Future<File?> _pdf() async {
     return guard(context, () async {
-      final bytes = await Api.instance.bytes('/api/invoices/${inv['id']}/pdf');
+      final bytes = await Api.instance.bytes('/api/$_entity/${inv['id']}/pdf');
       final dir = await getTemporaryDirectory();
-      final f = File('${dir.path}/Factuur ${inv['number'] ?? 'concept'}.pdf');
+      final f = File('${dir.path}/$_kind ${inv['number'] ?? 'concept'}.pdf');
       await f.writeAsBytes(bytes);
       return f;
     });
@@ -213,10 +237,33 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
 
   Future<void> _send() async {
     final client = _clients.firstWhere((c) => c['id'] == inv['client_id'], orElse: () => {});
-    final ok = await confirm(context, 'Factuur ${inv['number']} mailen naar ${client['email'] ?? '?'}? Je krijgt een kopie.', ok: 'Versturen');
+    final ok = await confirm(context, '$_kind ${inv['number'] ?? ''} mailen naar ${client['email'] ?? '?'}? Je krijgt een kopie.', ok: 'Versturen');
     if (!ok || !mounted) return;
-    final res = await guard(context, () => Api.instance.post('/api/invoices/${inv['id']}/send'));
-    if (res != null && mounted) showInfo(context, 'Verstuurd');
+    if (_quote && !await _store()) return;
+    if (!mounted) return;
+    final res = await guard(context, () => Api.instance.post('/api/$_entity/${inv['id']}/send'));
+    if (res != null && mounted) {
+      if (_quote) await _reload();
+      if (mounted) showInfo(context, 'Verstuurd');
+    }
+  }
+
+  Future<void> _reload() async {
+    final row = await guard(context, () async => Map<String, dynamic>.from(await Api.instance.get('/api/data/$_entity/${inv['id']}') as Map));
+    if (row != null && mounted) setState(() => inv = row);
+  }
+
+  Future<void> _toInvoice() async {
+    if (_concept && !await _store()) return;
+    if (!mounted) return;
+    final res = await guard(context, () => Api.instance.post('/api/quotes/${inv['id']}/invoice'));
+    if (res == null || !mounted) return;
+    await Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => InvoiceEditor(invoice: Map<String, dynamic>.from(res as Map))));
+  }
+
+  Future<void> _setQuoteStatus(String status) async {
+    final saved = await guard(context, () => Api.instance.save('quotes', {'id': inv['id'], 'created_at': inv['created_at'], 'status': status}));
+    if (saved != null && mounted) setState(() => inv = saved);
   }
 
   Future<void> _remind() async {
@@ -265,7 +312,7 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
     final scheme = inv['vat_scheme'] as String;
     return Scaffold(
       appBar: AppBar(
-        title: Text(inv['number'] != null ? 'Factuur ${inv['number']}' : 'Conceptfactuur'),
+        title: Text(inv['number'] != null ? '$_kind ${inv['number']}' : (_quote ? 'Nieuwe offerte' : 'Conceptfactuur')),
         actions: [
           if (_existing || _concept) IconButton(onPressed: _busy ? null : _openPdf, icon: const Icon(Icons.picture_as_pdf_outlined), tooltip: 'PDF bekijken'),
           if (!_concept) IconButton(onPressed: _savePdf, icon: const Icon(Icons.download_outlined), tooltip: 'PDF opslaan'),
@@ -275,7 +322,7 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
                 if (!await confirm(context, 'Concept verwijderen?', ok: 'Verwijderen')) return;
                 if (!context.mounted) return;
                 final ok = await guard(context, () async {
-                  await Api.instance.remove('invoices', inv['id'] as String);
+                  await Api.instance.remove(_entity, inv['id'] as String);
                   return true;
                 });
                 if (ok == true && context.mounted) Navigator.pop(context);
@@ -287,7 +334,10 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Readable(
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (!_concept)
+            if (_quote && !_concept)
+              const Notice('Omgezet naar een factuur. Deze offerte staat nu vast.', color: green, icon: Icons.check_circle_outline),
+            if (_quote && _concept && inv['status'] == 'afgewezen') const Notice('Afgewezen door de klant.', icon: Icons.block),
+            if (!_quote && !_concept)
               Notice(
                 inv['status'] == 'betaald'
                     ? 'Betaald op ${longDate(inv['paid_at'] as String?)}.'
@@ -321,7 +371,11 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
             ]),
             const SizedBox(height: 12),
             Row(children: [
-              Expanded(child: _concept ? DateField(label: 'Factuurdatum', value: inv['date'] as String?, onChanged: (v) => setState(() => inv['date'] = v)) : _fixed('Factuurdatum', longDate(inv['date'] as String?))),
+              Expanded(
+                child: _concept
+                    ? DateField(label: _quote ? 'Datum' : 'Factuurdatum', value: inv['date'] as String?, onChanged: (v) => setState(() => inv['date'] = v))
+                    : _fixed(_quote ? 'Datum' : 'Factuurdatum', longDate(inv['date'] as String?)),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonFormField<String>(
@@ -337,6 +391,16 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
                 ),
               ),
             ]),
+            if (_quote) ...[
+              const SizedBox(height: 12),
+              _concept
+                  ? DateField(
+                      label: 'Geldig tot (leeg: 30 dagen na versturen)',
+                      value: (inv['valid_until'] as String? ?? '').isEmpty ? null : inv['valid_until'] as String,
+                      onChanged: (v) => setState(() => inv['valid_until'] = v),
+                    )
+                  : _fixed('Geldig tot', longDate(inv['valid_until'] as String?)),
+            ],
             if (scheme == 'verlegd_eu') const Padding(padding: EdgeInsets.only(top: 8), child: Text('Zet het btw-id van de klant bij de klant; het komt op de factuur.', style: TextStyle(fontSize: 12))),
             const SizedBox(height: 20),
             Text('Regels', style: Theme.of(context).textTheme.titleSmall),
@@ -354,9 +418,24 @@ class _InvoiceEditorState extends State<InvoiceEditor> {
               ]),
             ),
             const SizedBox(height: 12),
-            TextField(controller: _note, decoration: const InputDecoration(labelText: 'Notitie op de factuur'), maxLines: 2),
+            TextField(controller: _note, enabled: !_quote || _concept, decoration: InputDecoration(labelText: _quote ? 'Notitie op de offerte' : 'Notitie op de factuur'), maxLines: 2),
             const SizedBox(height: 24),
-            if (_concept)
+            if (_quote)
+              Wrap(spacing: 12, runSpacing: 12, children: [
+                if (_concept) ...[
+                  OutlinedButton(onPressed: _busy ? null : () => _act(() => _storeAndSay('Bewaard')), child: const Text('Bewaren')),
+                  FilledButton.icon(
+                    onPressed: _busy ? null : () => _act(_send),
+                    icon: const Icon(Icons.send_outlined),
+                    label: Text(inv['sent_at'] != null ? 'Opnieuw mailen' : 'Mailen naar klant'),
+                  ),
+                  FilledButton.icon(onPressed: _busy ? null : () => _act(_toInvoice), icon: const Icon(Icons.request_quote_outlined), label: const Text('Akkoord: maak factuur')),
+                  if (_existing && inv['status'] != 'afgewezen')
+                    TextButton(onPressed: _busy ? null : () => _act(() => _setQuoteStatus('afgewezen')), child: const Text('Afgewezen')),
+                ] else
+                  FilledButton.icon(onPressed: _busy ? null : () => _act(_toInvoice), icon: const Icon(Icons.open_in_new), label: const Text('Naar de factuur')),
+              ])
+            else if (_concept)
               Row(children: [
                 Expanded(child: OutlinedButton(onPressed: _busy ? null : () => _act(() => _storeAndSay('Bewaard')), child: const Text('Bewaren'))),
                 const SizedBox(width: 12),

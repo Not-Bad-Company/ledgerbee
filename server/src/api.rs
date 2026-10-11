@@ -2,7 +2,7 @@ use crate::auth::{self, Device};
 use crate::db::{self, Pool};
 use crate::entities::{self, ListQuery, BANK, DOCUMENTS, INVOICES};
 use crate::error::{ApiError, ApiResult};
-use crate::{bank, config, export, files, invoices, parse, pdf, reminders, tax};
+use crate::{bank, config, export, files, invoices, parse, pdf, quotes, reminders, tax};
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::header;
@@ -44,6 +44,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/invoices/:id/send", post(send_invoice))
         .route("/api/invoices/:id/remind", post(remind_invoice))
         .route("/api/invoices/:id/credit", post(credit_invoice))
+        .route("/api/quotes/:id/pdf", get(quote_pdf))
+        .route("/api/quotes/:id/number", post(number_quote))
+        .route("/api/quotes/:id/send", post(send_quote))
+        .route("/api/quotes/:id/invoice", post(quote_to_invoice))
         .route("/api/bank/import", post(bank_import))
         .route("/api/bank/suggestions", get(bank_suggestions))
         .route("/api/bank/missing", get(bank_missing))
@@ -230,6 +234,69 @@ async fn download(_d: Device, Path(sha): Path<String>) -> ApiResult<Response> {
     let bytes = tokio::fs::read(p).await.map_err(|_| ApiError::not_found())?;
     let kind = files::sniff(&bytes);
     Ok(([(header::CONTENT_TYPE, kind), (header::CACHE_CONTROL, "private, max-age=31536000, immutable")], bytes).into_response())
+}
+
+fn quote_with_client(c: &Connection, id: &str) -> ApiResult<(Value, Value)> {
+    let quote = entities::get(c, &entities::QUOTES, id)?.ok_or_else(ApiError::not_found)?;
+    let client = quote["client_id"]
+        .as_str()
+        .map(|cid| entities::get(c, &entities::CLIENTS, cid))
+        .transpose()?
+        .flatten()
+        .unwrap_or(json!({}));
+    Ok((quote, client))
+}
+
+async fn quote_pdf(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Response> {
+    let (quote, client, company) = with_db(&s, move |c| quote_with_client(c, &id).map(|(q, cl)| (q, cl, config::company(c)))).await?;
+    let bytes = pdf::render(&company, &quote, &client)?;
+    let disposition = format!("inline; filename=\"Offerte {}.pdf\"", quote["number"].as_str().unwrap_or("concept"));
+    Ok(([(header::CONTENT_TYPE, "application/pdf".to_string()), (header::CONTENT_DISPOSITION, disposition)], bytes).into_response())
+}
+
+async fn number_quote(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    with_db(&s, move |c| quotes::number(c, &id)).await.map(Json)
+}
+
+async fn send_quote(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    if !crate::mail::configured() {
+        return Err(ApiError::bad("E-mail is niet ingesteld op de server (BREVO_API_KEY, EMAIL_FROM_ADDRESS)"));
+    }
+    let qid = id.clone();
+    let (quote, client, company, owner) = with_db(&s, move |c| {
+        quotes::number(c, &qid)?;
+        quote_with_client(c, &qid).map(|(q, cl)| (q, cl, config::company(c), config::owner_email(c)))
+    })
+    .await?;
+    let to = client["email"].as_str().unwrap_or("").to_string();
+    if to.is_empty() {
+        return Err(ApiError::bad("Deze klant heeft geen e-mailadres"));
+    }
+    let bytes = pdf::render(&company, &quote, &client)?;
+    let number = quote["number"].as_str().unwrap_or("").to_string();
+    let greeting = crate::mail::escape(client["contact"].as_str().filter(|c| !c.is_empty()).or(client["name"].as_str()).unwrap_or(""));
+    let html = format!(
+        "<p>Beste {greeting},</p><p>Hierbij de offerte {} van {} voor {}, geldig tot en met {}. Laat maar weten of je akkoord bent, dan ga ik aan de slag.</p><p>Met vriendelijke groet,<br>{}<br>{}</p>",
+        crate::mail::escape(&number),
+        crate::mail::escape(&company.name),
+        pdf::eur(invoices::totals_of(&quote).incl_cents),
+        pdf::nl_date(quote["valid_until"].as_str().unwrap_or("")),
+        crate::mail::escape(&company.owner),
+        crate::mail::escape(&company.name),
+    );
+    let subject = format!("Offerte {} van {}", number, company.name);
+    crate::mail::send(&[&to, &owner], &subject, &html, Some(crate::mail::Attachment { name: format!("Offerte {number}.pdf"), bytes })).await?;
+    with_db(&s, move |c| {
+        c.execute("UPDATE quotes SET sent_at = ?1, updated_at = ?1 WHERE id = ?2", [db::now(), id.clone()])?;
+        entities::audit(c, "quotes", &id, "sent", None, Some(&json!({"to": to})))?;
+        Ok(())
+    })
+    .await?;
+    Ok(Json(json!({"ok": true})))
+}
+
+async fn quote_to_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    with_db(&s, move |c| quotes::to_invoice(c, &id)).await.map(Json)
 }
 
 async fn credit_invoice(State(s): State<AppState>, _d: Device, Path(id): Path<String>) -> ApiResult<Json<Value>> {

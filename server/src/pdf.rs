@@ -84,7 +84,9 @@ impl Page<'_> {
 
 pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Result<Vec<u8>> {
     let number = invoice["number"].as_str().unwrap_or("CONCEPT");
-    let (doc, page, layer) = PdfDocument::new(format!("Factuur {number}"), Mm(210.0), Mm(297.0), "factuur");
+    let quote = invoice.get("valid_until").is_some();
+    let kind = if quote { "Offerte" } else { "Factuur" };
+    let (doc, page, layer) = PdfDocument::new(format!("{kind} {number}"), Mm(210.0), Mm(297.0), "document");
     let regular = doc.add_builtin_font(BuiltinFont::Helvetica)?;
     let bold = doc.add_builtin_font(BuiltinFont::HelveticaBold)?;
     let p = Page { layer: doc.get_page(page).get_layer(layer), regular: &regular, bold: &bold };
@@ -127,12 +129,20 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
     }
 
     let is_credit = !invoice["credit_of"].as_str().unwrap_or("").is_empty();
-    p.text(if is_credit { "Creditfactuur" } else { "Factuur" }, 22.0, 20.0, 195.0, true);
-    let facts = [
-        ("Factuurnummer", number.to_string()),
-        ("Factuurdatum", nl_date(invoice["date"].as_str().unwrap_or(""))),
-        ("Vervaldatum", nl_date(invoice["due_date"].as_str().unwrap_or(""))),
-    ];
+    p.text(if quote { "Offerte" } else if is_credit { "Creditfactuur" } else { "Factuur" }, 22.0, 20.0, 195.0, true);
+    let facts = if quote {
+        [
+            ("Offertenummer", number.to_string()),
+            ("Datum", nl_date(invoice["date"].as_str().unwrap_or(""))),
+            ("Geldig tot", nl_date(invoice["valid_until"].as_str().unwrap_or(""))),
+        ]
+    } else {
+        [
+            ("Factuurnummer", number.to_string()),
+            ("Factuurdatum", nl_date(invoice["date"].as_str().unwrap_or(""))),
+            ("Vervaldatum", nl_date(invoice["due_date"].as_str().unwrap_or(""))),
+        ]
+    };
     let mut fy = 185.0;
     for (k, v) in facts {
         p.text(k, 9.0, 20.0, fy, false);
@@ -194,7 +204,9 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
         p.text(n, 9.0, 20.0, ly, true);
         ly -= 6.0;
     }
-    let pay = if t.incl_cents < 0 {
+    let pay = if quote {
+        format!("Deze offerte is geldig tot en met {}. Akkoord? Een korte reactie per mail is genoeg.", nl_date(invoice["valid_until"].as_str().unwrap_or("")))
+    } else if t.incl_cents < 0 {
         format!("Dit bedrag van {} wordt verrekend met een openstaande factuur of aan je teruggestort.", eur(-t.incl_cents))
     } else if company.iban.is_empty() {
         format!("Graag het bedrag van {} vóór {} overmaken, onder vermelding van {}.", eur(t.incl_cents), nl_date(invoice["due_date"].as_str().unwrap_or("")), number)
@@ -220,7 +232,8 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
         }
     }
     let payee = if company.owner.is_empty() { &company.name } else { &company.owner };
-    if let Some(payload) = epc_payload(payee, &company.iban, t.incl_cents, &format!("Factuur {number}")) {
+    let payload = if quote { None } else { epc_payload(payee, &company.iban, t.incl_cents, &format!("Factuur {number}")) };
+    if let Some(payload) = payload {
         if let Ok(code) = qrcode::QrCode::with_error_correction_level(payload.as_bytes(), qrcode::EcLevel::M) {
             let n = code.width();
             let size = 30.0_f32;

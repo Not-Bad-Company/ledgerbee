@@ -182,6 +182,31 @@ ALTER TABLE invoices ADD COLUMN reminded_at TEXT;
 ALTER TABLE invoices ADD COLUMN reminders INTEGER NOT NULL DEFAULT 0;
 "#, r#"
 ALTER TABLE invoices ADD COLUMN credit_of TEXT;
+"#, r#"
+CREATE TABLE quotes (
+    id TEXT PRIMARY KEY,
+    number TEXT,
+    client_id TEXT REFERENCES clients(id),
+    date TEXT NOT NULL,
+    valid_until TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'concept',
+    vat_scheme TEXT NOT NULL DEFAULT 'nl',
+    note TEXT NOT NULL DEFAULT '',
+    sent_at TEXT,
+    invoice_id TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX quotes_number ON quotes(number) WHERE number IS NOT NULL;
+CREATE TABLE quote_lines (
+    id TEXT PRIMARY KEY,
+    quote_id TEXT NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL DEFAULT 0,
+    description TEXT NOT NULL DEFAULT '',
+    quantity_milli INTEGER NOT NULL DEFAULT 1000,
+    unit_cents INTEGER NOT NULL DEFAULT 0,
+    vat_rate TEXT NOT NULL DEFAULT '21',
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
 "#];
 
 const SEED_CATEGORIES: &[(&str, &str, i64, bool)] = &[
