@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../api.dart';
@@ -132,7 +133,8 @@ class OverviewScreen extends StatelessWidget {
   static String _left(int days) => days < 0 ? 'verlopen' : days == 0 ? 'vandaag' : days == 1 ? 'morgen' : '$days dagen';
 
   static String _greeting() {
-    final h = DateTime.now().hour;
+    const forced = int.fromEnvironment('BOEK_HOUR', defaultValue: -1);
+    final h = kDebugMode && forced >= 0 ? forced : DateTime.now().hour;
     return h < 6 ? 'Goedenacht' : h < 12 ? 'Goedemorgen' : h < 18 ? 'Goedemiddag' : 'Goedenavond';
   }
 
