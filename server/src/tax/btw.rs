@@ -24,6 +24,31 @@ pub struct Rubriek {
     pub base_eur: i64,
     pub vat_eur: i64,
     pub has_base: bool,
+    /// The invoices and costs behind the figure, so it can be checked before filing.
+    pub sources: Vec<Source>,
+}
+
+#[derive(Serialize, Debug, Clone, Default)]
+pub struct Source {
+    /// `invoice` or `document`.
+    pub kind: &'static str,
+    pub id: String,
+    pub date: String,
+    pub name: String,
+    pub base_cents: i64,
+    pub vat_cents: i64,
+}
+
+/// Adds one record's share to a rubriek's list, merging lines of the same record.
+fn note(sources: &mut HashMap<&'static str, Vec<Source>>, code: &'static str, src: Source) {
+    let list = sources.entry(code).or_default();
+    match list.iter_mut().find(|x| x.id == src.id && x.kind == src.kind) {
+        Some(x) => {
+            x.base_cents += src.base_cents;
+            x.vat_cents += src.vat_cents;
+        }
+        None => list.push(src),
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -88,19 +113,37 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
         e.1 += vat;
     };
     let mut warnings = vec![];
+    let mut sources: HashMap<&'static str, Vec<Source>> = HashMap::new();
 
     // Sales.
+    let client_names: HashMap<String, String> = {
+        let mut stmt = conn.prepare("SELECT id, name FROM clients")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        rows.collect::<Result<_, _>>()?
+    };
     for inv in invoices::final_between(conn, &from_s, &to_s)? {
         let t = invoices::totals_of(&inv);
         let scheme = inv["vat_scheme"].as_str().unwrap_or("nl");
+        let client = inv["client_id"].as_str().and_then(|c| client_names.get(c)).cloned().unwrap_or_default();
+        let name = format!("{} {}", inv["number"].as_str().unwrap_or(""), client).trim().to_string();
         for rt in t.per_rate {
-            match (scheme, rt.rate.as_str()) {
-                ("nl", "21") => add("1a", rt.base_cents, rt.vat_cents),
-                ("nl", "9") => add("1b", rt.base_cents, rt.vat_cents),
-                ("verlegd_eu", _) => add("3b", rt.base_cents, 0),
+            let (code, vat) = match (scheme, rt.rate.as_str()) {
+                ("nl", "21") => ("1a", rt.vat_cents),
+                ("nl", "9") => ("1b", rt.vat_cents),
+                ("verlegd_eu", _) => ("3b", 0),
                 // Services to a business outside the EU are not taxed here.
-                _ => add("1e", rt.base_cents, 0),
-            }
+                _ => ("1e", 0),
+            };
+            add(code, rt.base_cents, vat);
+            let src = Source {
+                kind: "invoice",
+                id: inv["id"].as_str().unwrap_or("").into(),
+                date: inv["date"].as_str().unwrap_or("").into(),
+                name: name.clone(),
+                base_cents: rt.base_cents,
+                vat_cents: vat,
+            };
+            note(&mut sources, code, src);
         }
     }
     let concepts: i64 = conn.query_row(
@@ -122,6 +165,14 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
             unconfirmed += 1;
             continue;
         }
+        let src = |base: i64, vat: i64| Source {
+            kind: "document",
+            id: doc["id"].as_str().unwrap_or("").into(),
+            date: doc["date"].as_str().unwrap_or("").into(),
+            name: doc["supplier_name"].as_str().unwrap_or("").into(),
+            base_cents: base,
+            vat_cents: vat,
+        };
         for line in doc["lines"].as_array().into_iter().flatten() {
             let base = line["amount_excl_cents"].as_i64().unwrap_or(0);
             let vat = line["vat_cents"].as_i64().unwrap_or(0);
@@ -130,11 +181,17 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
                 line["category_id"].as_str().and_then(|c| cats.get(c)).map(|c| c.vat_deductible).unwrap_or(true);
             let share = |v: i64| if deductible { pct(v, business) } else { 0 };
             match line["vat_rate"].as_str().unwrap_or("") {
-                "21" | "9" => voorbelasting += share(vat),
+                "21" | "9" => {
+                    voorbelasting += share(vat);
+                    note(&mut sources, "5b", src(base, share(vat)));
+                }
                 rate @ ("verlegd_eu" | "verlegd_buiten_eu") => {
                     let charged = pct(base, 21);
-                    add(if rate == "verlegd_eu" { "4b" } else { "4a" }, base, charged);
+                    let code = if rate == "verlegd_eu" { "4b" } else { "4a" };
+                    add(code, base, charged);
+                    note(&mut sources, code, src(base, charged));
                     voorbelasting += share(charged);
+                    note(&mut sources, "5b", src(base, share(charged)));
                 }
                 _ => {}
             }
@@ -146,7 +203,8 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
 
     let rub = |code: &'static str, label: &'static str, has_base: bool| {
         let (base, vat) = r.get(code).copied().unwrap_or_default();
-        Rubriek { code, label, base_cents: base, vat_cents: vat, base_eur: floor_eur(base), vat_eur: floor_eur(vat), has_base }
+        let sources = sources.get(code).cloned().unwrap_or_default();
+        Rubriek { code, label, base_cents: base, vat_cents: vat, base_eur: floor_eur(base), vat_eur: floor_eur(vat), has_base, sources }
     };
     let mut rubrieken = vec![
         rub("1a", "Leveringen/diensten belast met hoog tarief", true),
@@ -165,7 +223,8 @@ pub fn report(conn: &Connection, key: &str) -> ApiResult<BtwReport> {
     let verschuldigd_eur: i64 = rubrieken.iter().map(|x| x.vat_eur).sum();
     let voor_eur = ceil_eur(voorbelasting);
     rubrieken.push(Rubriek { code: "5a", label: "Verschuldigde btw (rubrieken 1 t/m 4)", vat_cents: verschuldigd_cents, vat_eur: verschuldigd_eur, ..Default::default() });
-    rubrieken.push(Rubriek { code: "5b", label: "Voorbelasting", vat_cents: voorbelasting, vat_eur: voor_eur, ..Default::default() });
+    let voor_sources = sources.remove("5b").unwrap_or_default();
+    rubrieken.push(Rubriek { code: "5b", label: "Voorbelasting", vat_cents: voorbelasting, vat_eur: voor_eur, sources: voor_sources, ..Default::default() });
     let total_cents = verschuldigd_cents - voorbelasting;
     let total_eur = verschuldigd_eur - voor_eur;
     rubrieken.push(Rubriek { code: "5g", label: "Totaal te betalen / terug te vragen", vat_cents: total_cents, vat_eur: total_eur, ..Default::default() });
@@ -231,6 +290,15 @@ mod tests {
         assert_eq!((get("4b").base_cents, get("4b").vat_cents), (4000, 840));
         // 210 + half of 420 + nothing for representatie + 840 reverse charge.
         assert_eq!(get("5b").vat_cents, 210 + 210 + 840);
+        // Every figure can be traced back: the sources add up to the rubriek.
+        for code in ["1a", "3b", "4b", "5b"] {
+            let r = get(code);
+            assert!(!r.sources.is_empty(), "{code} has sources");
+            assert_eq!(r.sources.iter().map(|x| x.vat_cents).sum::<i64>(), r.vat_cents, "{code} vat");
+            if r.has_base {
+                assert_eq!(r.sources.iter().map(|x| x.base_cents).sum::<i64>(), r.base_cents, "{code} base");
+            }
+        }
         assert_eq!(get("5a").vat_cents, 26250 + 840);
         assert_eq!(rep.total_cents, 26250 + 840 - 1260);
         assert_eq!(rep.total_eur, 262 + 8 - 13);

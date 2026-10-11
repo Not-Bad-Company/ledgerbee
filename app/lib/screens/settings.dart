@@ -40,7 +40,7 @@ class SettingsScreen extends StatelessWidget {
                       title: const Text('Gegevens aanpassen'),
                       subtitle: const Text('Ze staan op elke factuur'),
                       onTap: () async {
-                        await _editCompany(context, c, settings);
+                        await editCompany(context, c);
                         reload();
                       },
                     ),
@@ -157,7 +157,8 @@ class SettingsScreen extends StatelessWidget {
     ('iban', 'IBAN', TextInputType.text),
   ];
 
-  static Future<void> _editCompany(BuildContext context, Map current, Map settings) async {
+  /// The company form; also opened from the overview on first run.
+  static Future<void> editCompany(BuildContext context, Map current) async {
     final ctl = {
       for (final (k, _, _) in _companyFields) k: TextEditingController(text: (current[k] as String?) ?? ''),
     };

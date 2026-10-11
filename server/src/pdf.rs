@@ -5,7 +5,7 @@
 
 use crate::config::Company;
 use crate::invoices::{self, Totals};
-use printpdf::{BuiltinFont, IndirectFontRef, Line, Mm, PdfDocument, PdfLayerReference, Point};
+use printpdf::{BuiltinFont, IndirectFontRef, Line, Mm, PdfDocument, PdfLayerReference, Point, Rect};
 use serde_json::Value;
 
 /// `123456` → `€ 1.234,56`.
@@ -39,6 +39,37 @@ fn qty(milli: i64) -> String {
     } else {
         format!("{:.2}", milli as f64 / 1000.0).replace('.', ",")
     }
+}
+
+/// The EPC QR code payload ("girocode", EPC069-12 version 002): banking apps
+/// that read it fill in the transfer by themselves. None when there is no
+/// IBAN, nothing to pay, or the text would not fit the 331-byte limit.
+pub fn epc_payload(name: &str, iban: &str, cents: i64, reference: &str) -> Option<String> {
+    let iban: String = iban.chars().filter(|c| !c.is_whitespace()).collect::<String>().to_uppercase();
+    if iban.len() < 15 || cents <= 0 || cents > 99_999_999_999 {
+        return None;
+    }
+    let name: String = name.chars().take(70).collect();
+    let reference: String = reference.chars().take(140).collect();
+    let text = format!("BCD\n002\n1\nSCT\n\n{name}\n{iban}\nEUR{}.{:02}\n\n\n{reference}", cents / 100, cents % 100);
+    (text.len() <= 331).then_some(text)
+}
+
+/// Splits text into lines of at most `max` characters, at spaces.
+fn wrap(text: &str, max: usize) -> Vec<String> {
+    let mut out = vec![];
+    let mut line = String::new();
+    for word in text.split_whitespace() {
+        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > max {
+            out.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+    }
+    out.push(line);
+    out
 }
 
 struct Page<'a> {
@@ -137,21 +168,8 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
         let q = l["quantity_milli"].as_i64().unwrap_or(1000);
         let u = l["unit_cents"].as_i64().unwrap_or(0);
         let desc = l["description"].as_str().unwrap_or("");
-        // Long descriptions wrap at roughly 55 characters.
-        let mut chunk = String::new();
         let mut first = true;
-        let mut lines_out = vec![];
-        for word in desc.split_whitespace() {
-            if chunk.len() + word.len() > 55 && !chunk.is_empty() {
-                lines_out.push(std::mem::take(&mut chunk));
-            }
-            if !chunk.is_empty() {
-                chunk.push(' ');
-            }
-            chunk.push_str(word);
-        }
-        lines_out.push(chunk);
-        for text in lines_out {
+        for text in wrap(desc, 55) {
             p.text(&text, 10.0, 20.0, ly, false);
             if first {
                 p.right(&qty(q), 10.0, 120.0, ly, false);
@@ -203,9 +221,35 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
             number
         )
     };
-    p.text(&pay, 9.0, 20.0, ly, false);
+    for line in wrap(&pay, 95) {
+        p.text(&line, 9.0, 20.0, ly, false);
+        ly -= 4.5;
+    }
     if let Some(note) = invoice["note"].as_str().filter(|n| !n.is_empty()) {
-        p.text(note, 9.0, 20.0, ly - 6.0, false);
+        ly -= 2.0;
+        for line in wrap(note, 95) {
+            p.text(&line, 9.0, 20.0, ly, false);
+            ly -= 4.5;
+        }
+    }
+    // Scan to pay, bottom right.
+    let payee = if company.owner.is_empty() { &company.name } else { &company.owner };
+    if let Some(payload) = epc_payload(payee, &company.iban, t.incl_cents, &format!("Factuur {number}")) {
+        if let Ok(code) = qrcode::QrCode::with_error_correction_level(payload.as_bytes(), qrcode::EcLevel::M) {
+            let n = code.width();
+            let size = 30.0_f32;
+            let cell = size / n as f32;
+            let (x0, y0) = (190.0 - size, 22.0);
+            for (i, c) in code.to_colors().iter().enumerate() {
+                if *c == qrcode::Color::Dark {
+                    let (col, row) = ((i % n) as f32, (i / n) as f32);
+                    let x = x0 + col * cell;
+                    let y = y0 + size - (row + 1.0) * cell;
+                    p.layer.add_rect(Rect::new(Mm(x), Mm(y), Mm(x + cell), Mm(y + cell)));
+                }
+            }
+            p.right("Scan om te betalen", 7.5, 190.0, y0 + size + 3.0, false);
+        }
     }
     p.text(&format!("{} · KvK {} · {}", company.name, company.kvk, company.email), 7.5, 20.0, 12.0, false);
 
@@ -218,6 +262,14 @@ pub fn render(company: &Company, invoice: &Value, client: &Value) -> anyhow::Res
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_epc_code_follows_the_standard() {
+        let t = epc_payload("Daan Hessen", "NL91 ABNA 0417 1643 00", 246840, "Factuur 2026-001").unwrap();
+        assert_eq!(t, "BCD\n002\n1\nSCT\n\nDaan Hessen\nNL91ABNA0417164300\nEUR2468.40\n\n\nFactuur 2026-001");
+        assert!(epc_payload("x", "", 100, "r").is_none(), "no IBAN, no code");
+        assert!(epc_payload("x", "NL91ABNA0417164300", 0, "r").is_none(), "nothing to pay");
+    }
 
     #[test]
     fn money_and_dates_read_dutch() {

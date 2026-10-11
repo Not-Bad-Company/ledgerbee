@@ -8,6 +8,7 @@ import '../main.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'costs.dart';
+import 'settings.dart';
 
 class OverviewScreen extends StatelessWidget {
   const OverviewScreen({super.key});
@@ -59,7 +60,31 @@ class OverviewScreen extends StatelessWidget {
                     Text(_summary(tasks.length), style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   ]),
                 ),
-                if ((company['btw'] as String).isEmpty)
+                if ((company['name'] as String).isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Eerst je bedrijf', style: labelStyle(color: accent)),
+                          const SizedBox(height: 6),
+                          Text('Naam, adres, KvK, btw-id en IBAN', style: Theme.of(context).textTheme.titleLarge),
+                          const SizedBox(height: 6),
+                          Text('Ze komen op elke factuur. Daarna kun je meteen bonnen scannen en factureren.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: muted)),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: () async {
+                              await SettingsScreen.editCompany(context, company);
+                              reload();
+                            },
+                            child: const Text('Gegevens invullen'),
+                          ),
+                        ]),
+                      ),
+                    ),
+                  ),
+                if ((company['name'] as String).isNotEmpty && (company['btw'] as String).isEmpty)
                   const Notice('Het btw-identificatienummer ontbreekt nog. Facturen moeten het vermelden: vul het in bij Instellingen → Onderneming '
                       'zodra de Belastingdienst het stuurt.'),
                 if (next != null) Padding(padding: const EdgeInsets.only(bottom: 20), child: _Envelope(deadline: next, quarter: quarter)),

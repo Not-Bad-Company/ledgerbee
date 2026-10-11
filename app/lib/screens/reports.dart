@@ -9,6 +9,8 @@ import '../api.dart';
 import '../format.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'costs.dart';
+import 'invoices.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
@@ -145,13 +147,14 @@ class _Head extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = Theme.of(context).textTheme.labelSmall;
+    final s = labelStyle(size: 11);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Row(children: [
         Expanded(child: Text('Rubriek', style: s)),
         SizedBox(width: 90, child: Text('Omzet', style: s, textAlign: TextAlign.right)),
         SizedBox(width: 90, child: Text('Btw', style: s, textAlign: TextAlign.right)),
+        const SizedBox(width: 24),
       ]),
     );
   }
@@ -166,16 +169,57 @@ class _Rubriek extends StatelessWidget {
   Widget build(BuildContext context) {
     final st = amountStyle(context, weight: highlight ? FontWeight.w700 : FontWeight.w400);
     String whole(int v) => '€ ${number(v)}';
-    return Tooltip(
-      message: 'Exact: omzet ${eur(x['base_cents'] as int)}, btw ${eur(x['vat_cents'] as int)}',
+    final sources = ((x['sources'] as List?) ?? const []).cast<Map>();
+    return InkWell(
+      onTap: sources.isEmpty ? null : () => _showSources(context, sources),
       child: Container(
-        color: highlight ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.05) : null,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: highlight ? surface : null,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(width: 34, child: Text(x['code'] as String, style: const TextStyle(fontWeight: FontWeight.w700))),
+          SizedBox(width: 34, child: Text(x['code'] as String, style: labelStyle(color: highlight ? accent : fg, size: 13))),
           Expanded(child: Text(x['label'] as String, style: Theme.of(context).textTheme.bodySmall)),
           SizedBox(width: 90, child: Text(x['has_base'] == true ? whole(x['base_eur'] as int) : '', style: st, textAlign: TextAlign.right)),
           SizedBox(width: 90, child: Text(whole(x['vat_eur'] as int), style: st, textAlign: TextAlign.right)),
+          SizedBox(width: 24, child: sources.isEmpty ? null : const Icon(Icons.chevron_right, size: 18, color: faint)),
+        ]),
+      ),
+    );
+  }
+
+  /// The invoices and costs behind a rubriek, each one a tap away.
+  void _showSources(BuildContext context, List<Map> sources) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        builder: (c, scroll) => ListView(controller: scroll, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Text('${x['code']} · ${x['label']}', style: Theme.of(c).textTheme.titleMedium),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Text('Exact: ${x['has_base'] == true ? 'omzet ${eur(x['base_cents'] as int)}, ' : ''}btw ${eur(x['vat_cents'] as int)}', style: labelStyle()),
+          ),
+          for (final src in sources)
+            ListTile(
+              leading: Icon(src['kind'] == 'invoice' ? Icons.request_quote_outlined : Icons.receipt_long_outlined),
+              title: Text((src['name'] as String).isEmpty ? 'Onbekend' : src['name'] as String),
+              subtitle: Text(shortDate(src['date'] as String)),
+              trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                if (x['has_base'] == true) Text(eur(src['base_cents'] as int), style: amountStyle(c)),
+                Text('btw ${eur(src['vat_cents'] as int)}', style: labelStyle()),
+              ]),
+              onTap: () async {
+                final invoice = src['kind'] == 'invoice';
+                final row = await guard(c, () async => Map<String, dynamic>.from(await Api.instance.get('/api/data/${invoice ? 'invoices' : 'documents'}/${src['id']}') as Map));
+                if (row == null || !c.mounted) return;
+                await Navigator.push(c, MaterialPageRoute(builder: (_) => invoice ? InvoiceEditor(invoice: row) : DocumentEditor(doc: row)));
+              },
+            ),
+          const SizedBox(height: 16),
         ]),
       ),
     );
